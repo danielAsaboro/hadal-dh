@@ -95,7 +95,8 @@ def normalize_entity_context(
         raise ContextNormalizationError("get_entities did not return all requested URNs")
 
     contexts: list[AssetContext] = []
-    for urn in sorted(requested):
+    for asset in assets:
+        urn = asset.urn
         entity = returned[urn]
         raw_health = _list(entity.get("health", []), "entity health")
         statuses: set[str] = set()
@@ -107,7 +108,7 @@ def normalize_entity_context(
             statuses.add(status.upper())
         contexts.append(
             AssetContext(
-                asset=requested[urn],
+                asset=asset,
                 owners=_nested_assets(entity.get("ownership"), "owners", "owner"),
                 tags=_nested_assets(entity.get("tags"), "tags", "tag"),
                 glossary_terms=_nested_assets(

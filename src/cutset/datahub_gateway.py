@@ -13,7 +13,13 @@ warnings.filterwarnings("ignore", category=ExperimentalWarning)
 from datahub.sdk.main_client import DataHubClient
 from datahub_agent_context.langchain_tools import build_langchain_tools
 
-from cutset.domain import AssetRef, ColumnRename, ImpactEvidence, LineagePath
+from cutset.context import (
+    ContextNormalizationError,
+    normalize_assertions,
+    normalize_entity_context,
+    normalize_queries,
+)
+from cutset.domain import AssetContext, AssetRef, ColumnRename, ImpactEvidence, LineagePath
 from cutset.policy import decide
 from cutset.reporting import ImpactReport, render_markdown
 
@@ -391,13 +397,104 @@ class DataHubGateway:
                         arguments["target_column"] = target_column
                     response = self._invoke("get_lineage_paths_between", arguments)
                     exact_paths.extend(_normalize_exact_paths(summary, response))
+        asset_contexts: tuple[AssetContext, ...] = ()
+        context_complete = False
+        if lineage_complete:
+            asset_contexts, context_complete = self._collect_asset_contexts(
+                source,
+                tuple(exact_paths),
+                change,
+            )
         return ImpactEvidence(
             source=source,
             lineage_paths=tuple(exact_paths) if lineage_complete else paths,
-            complete=schema_complete and lineage_complete,
+            complete=schema_complete and lineage_complete and context_complete,
             change=change,
             schema_fields=schema_fields,
+            asset_contexts=asset_contexts,
         )
+
+    def _collect_asset_contexts(
+        self,
+        source: AssetRef,
+        paths: tuple[LineagePath, ...],
+        change: ColumnRename,
+    ) -> tuple[tuple[AssetContext, ...], bool]:
+        assets: dict[str, AssetRef] = {source.urn: source}
+        relevant_columns: dict[str, set[str]] = {source.urn: {change.old_name}}
+        for path in paths:
+            assets[path.downstream.urn] = path.downstream
+            if path.downstream.asset_type == "dataset":
+                relevant_columns.setdefault(path.downstream.urn, set()).update(
+                    path.downstream_columns
+                )
+
+        ordered_assets = (
+            source,
+            *(assets[urn] for urn in sorted(assets) if urn != source.urn),
+        )
+        try:
+            entity_response = self._invoke(
+                "get_entities", {"urns": [asset.urn for asset in ordered_assets]}
+            )
+            contexts = normalize_entity_context(ordered_assets, entity_response)
+            enriched: list[AssetContext] = []
+            for context in contexts:
+                if context.asset.asset_type != "dataset":
+                    enriched.append(context)
+                    continue
+                columns = sorted(relevant_columns.get(context.asset.urn, ()))
+                column = columns[0] if columns else None
+                query_arguments: dict[str, object] = {
+                    "urn": context.asset.urn,
+                    "start": 0,
+                    "count": 10,
+                }
+                assertion_arguments: dict[str, object] = {
+                    "urn": context.asset.urn,
+                    "start": 0,
+                    "count": 5,
+                    "run_events_count": 1,
+                }
+                if column is not None:
+                    query_arguments["column"] = column
+                    assertion_arguments["column"] = column
+                query_total, queries = normalize_queries(
+                    context.asset,
+                    self._invoke("get_dataset_queries", query_arguments),
+                )
+                sample = self._invoke(
+                    "get_dataset_assertions", assertion_arguments
+                )
+                failing_arguments = {
+                    **assertion_arguments,
+                    "count": 1,
+                    "status": "FAILING",
+                }
+                error_arguments = {
+                    **assertion_arguments,
+                    "count": 1,
+                    "status": "ERROR",
+                }
+                quality = normalize_assertions(
+                    sample,
+                    self._invoke("get_dataset_assertions", failing_arguments),
+                    self._invoke("get_dataset_assertions", error_arguments),
+                )
+                enriched.append(
+                    replace(
+                        context,
+                        query_total=query_total,
+                        queries=queries,
+                        quality=quality,
+                    )
+                )
+            return tuple(enriched), True
+        except (ContextNormalizationError, DataHubContextError):
+            return (
+                tuple(AssetContext(asset=asset, complete=False) for asset in ordered_assets),
+                False,
+            )
 
     def _resolve_tag(self, tag_name: str) -> str:
         response = _as_mapping(

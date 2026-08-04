@@ -144,7 +144,19 @@ def _gateway(*, search_results: int = 1, remaining_fields: int = 0) -> DataHubGa
                 "total": search_results,
             },
         ),
-        _FakeTool("get_entities", [entity]),
+        _FakeTool(
+            "get_entities",
+            lambda arguments: [
+                {
+                    "urn": urn,
+                    "ownership": {"owners": []},
+                    "tags": {"tags": []},
+                    "glossaryTerms": {"terms": []},
+                    "health": [],
+                }
+                for urn in arguments["urns"]
+            ],
+        ),
         _FakeTool(
             "list_schema_fields",
             {
@@ -155,6 +167,26 @@ def _gateway(*, search_results: int = 1, remaining_fields: int = 0) -> DataHubGa
         ),
         _FakeTool("get_lineage", _captured_lineage()),
         _FakeTool("get_lineage_paths_between", _exact_path_for),
+        _FakeTool(
+            "get_dataset_queries",
+            lambda arguments: {
+                "start": 0,
+                "total": 0,
+                "count": arguments["count"],
+            },
+        ),
+        _FakeTool(
+            "get_dataset_assertions",
+            {
+                "success": True,
+                "data": {
+                    "start": 0,
+                    "count": 0,
+                    "total": 0,
+                    "assertions": [],
+                },
+            },
+        ),
     ]
     return DataHubGateway(client=object(), tools=tools)
 
@@ -181,6 +213,95 @@ def test_collects_grounded_evidence_using_resolved_urn() -> None:
         "max_results": 50,
         "offset": 0,
     }
+
+
+def test_collects_complete_governance_quality_and_usage_context() -> None:
+    gateway = _gateway()
+    get_entities = gateway.tools["get_entities"]
+
+    def entities_for(arguments: dict) -> list[dict]:
+        return [
+            {
+                "urn": urn,
+                "ownership": {"owners": []},
+                "tags": {"tags": []},
+                "glossaryTerms": {"terms": []},
+                "health": [{"type": "INCIDENTS", "status": "PASS"}],
+            }
+            for urn in arguments["urns"]
+        ]
+
+    get_entities.response = entities_for
+
+    evidence = gateway.collect_evidence(
+        ColumnRename("customers", "email", "email_address", "models/customers.yml")
+    )
+
+    assert evidence.complete is True
+    assert {context.asset.urn for context in evidence.asset_contexts} == {
+        evidence.source.urn,
+        *(path.downstream.urn for path in evidence.lineage_paths),
+    }
+    assert all(context.complete for context in evidence.asset_contexts)
+    assert gateway.tools["get_dataset_queries"].calls[0] == {
+        "urn": evidence.source.urn,
+        "column": "email",
+        "start": 0,
+        "count": 10,
+    }
+    assert gateway.tools["get_dataset_assertions"].calls[:3] == [
+        {
+            "urn": evidence.source.urn,
+            "start": 0,
+            "count": 5,
+            "column": "email",
+            "run_events_count": 1,
+        },
+        {
+            "urn": evidence.source.urn,
+            "start": 0,
+            "count": 1,
+            "column": "email",
+            "status": "FAILING",
+            "run_events_count": 1,
+        },
+        {
+            "urn": evidence.source.urn,
+            "start": 0,
+            "count": 1,
+            "column": "email",
+            "status": "ERROR",
+            "run_events_count": 1,
+        },
+    ]
+
+
+def test_missing_enrichment_tool_marks_evidence_incomplete() -> None:
+    gateway = _gateway()
+    gateway.tools.pop("get_dataset_queries")
+
+    evidence = gateway.collect_evidence(
+        ColumnRename("customers", "email", "email_address", "models/customers.yml")
+    )
+
+    assert evidence.complete is False
+    assert evidence.asset_contexts
+    assert any(not context.complete for context in evidence.asset_contexts)
+
+
+def test_malformed_query_context_marks_evidence_incomplete() -> None:
+    gateway = _gateway()
+    gateway.tools["get_dataset_queries"].response = {
+        "start": 0,
+        "total": 1,
+        "count": 10,
+    }
+
+    evidence = gateway.collect_evidence(
+        ColumnRename("customers", "email", "email_address", "models/customers.yml")
+    )
+
+    assert evidence.complete is False
 
 
 def test_resolves_dataset_by_urn_name_when_search_returns_display_name() -> None:

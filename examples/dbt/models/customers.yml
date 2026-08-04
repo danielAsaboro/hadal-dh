@@ -1,0 +1,13 @@
+version: 2
+
+models:
+  - name: customers
+    columns:
+      - name: customer_id
+        tests:
+          - unique
+          - not_null
+      - name: email_address
+        tests:
+          - not_null
+

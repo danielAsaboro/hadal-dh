@@ -1,0 +1,8 @@
+version: 2
+models:
+  - name: customers
+    columns:
+      - name: email_address
+        tests:
+          - not_null
+

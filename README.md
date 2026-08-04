@@ -2,73 +2,80 @@
 
 > Know what breaks before you merge.
 
-Cutset is being built from the official DataHub Agent Starter for the Build with DataHub Agent Hackathon. The first vertical slice is specified in [`docs/superpowers/specs/2026-08-04-cutset-design.md`](docs/superpowers/specs/2026-08-04-cutset-design.md).
+A dbt column rename looks harmless in a pull request. The downstream dashboard, feature, or production model it breaks is usually invisible there. Cutset is an impact-aware PR guardian that reads DataHub before merge, traces the changed column through lineage, and returns an auditable verdict with a validated compatibility patch.
 
-A minimal, forkable AI agent that **reads [DataHub](https://datahub.com) for context, takes an action, and writes the result back**.
+## The 60-second demo
 
-It's a **learning starter, not production code** — one skeleton file + one goal file you can read in a few minutes, understand, and build your own agent on top of.
+1. Rename `customers.email` to `customers.email_address` in dbt.
+2. Run Cutset between the PR base and head revisions.
+3. Cutset resolves `customers` through DataHub search, confirms `email` in the catalog schema, and traces downstream column lineage.
+4. A downstream `mlModel` produces `critical / ml_assets_affected`, a blocking exit code, JSON/Markdown evidence, and a review-only compatibility alias.
+5. With `--write-back`, Cutset saves the analysis in DataHub and tags only assets returned by the current graph read.
 
-> **The loop:** read context → decide → act → write back.
-> An LLM is capable but blind to your data stack. DataHub holds the context — schemas, lineage, ownership, glossary, quality. This wires the two together.
+See the [sanitized impact report](examples/impact-report.md) and [architecture](docs/architecture.md).
 
-## Stack
+## Why DataHub is essential
 
-- **[LangGraph](https://github.com/langchain-ai/langgraph)** — the agent loop
-- **[DataHub Agent Context Kit](https://docs.datahub.com/docs/dev-guides/agent-context/agent-context)** — DataHub's read + write tools, directly in Python (no MCP server to run)
-- **Your own LLM** — Claude, Gemini, OpenAI, or a local model (swappable via `AGENT_MODEL`)
+Cutset does not grep for table names and call that lineage. It uses the DataHub Agent Context Kit to:
 
-## Requirements
+- search for the changed model instead of guessing a URN;
+- verify the old field against the catalog schema;
+- trace column-level downstream lineage through three hops;
+- distinguish ordinary dataset consumers from ML features and models;
+- save an idempotent impact document and apply an existing risk tag.
 
-- **Docker Desktop** — to run DataHub locally (8 GB+ RAM recommended)
-- **Python 3.11** recommended (works on 3.9+)
-- A running **DataHub instance** — [Quickstart](https://docs.datahub.com/docs/quickstart): `pip install acryl-datahub` → `datahub docker quickstart`
-- A DataHub **personal access token** — UI → Settings → Access Tokens ([enable token auth first](https://docs.datahub.com/docs/authentication/personal-access-tokens) if the button is greyed out)
-- An **LLM API key** for your provider
+Missing or truncated metadata blocks the check. An LLM can draft a remediation, but deterministic policy owns merge safety and deterministic validators reject ungrounded code.
 
 ## Quickstart
 
+Cutset supports Python 3.11–3.13. Python 3.14 is intentionally excluded because the pinned DataHub stack currently includes a native dependency without 3.14 support.
+
 ```bash
-cd datahub-agent-starter
-
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-
-cp .env.example .env      # set DATAHUB_GMS_URL (http://localhost:8080), DATAHUB_GMS_TOKEN, and your LLM key
-
-python agent.py
+python3.13 -m venv .venv
+source .venv/bin/activate
+pip install -e '.[dev]'
+cp .env.example .env
 ```
 
-The agent reads DataHub, takes one action, writes the result back, and prints a plain-English report. Refresh the DataHub UI to see the change.
+Set `DATAHUB_GMS_URL` and `DATAHUB_GMS_TOKEN`, then run:
 
-> ⚠️ **Notes**
-> - This agent has **write access** to your catalog (`include_mutations=True`) — point it at a local/test instance first.
-> - DataHub won't apply a **tag / term / owner that doesn't exist yet** — create it once (e.g. add the `needs-review` tag to any dataset in the UI) before the agent applies it.
+```bash
+cutset review \
+  --repo /path/to/dbt-repo \
+  --base BASE_SHA \
+  --head HEAD_SHA \
+  --repository-id owner/repo \
+  --output cutset-output
+```
 
-## How it works
+Use `--write-back --tag-name cutset-at-risk` only after creating that tag in a test DataHub instance. Cutset never creates or guesses governance URNs.
 
-Two files, deliberately separated:
+## Stable exit codes
 
-- **`agent.py`** — the skeleton, the same for any task: connect (`DataHubClient.from_env()`) → get tools (`build_langchain_tools(client, include_mutations=True)`) → pick an LLM (`init_chat_model`) → wire the agent (`create_react_agent`) and run the goal.
-- **`goal.py`** — the one thing you change: a `SYSTEM_PROMPT` (how it behaves) and a `GOAL` (what to do).
+| Code | Meaning |
+| ---: | --- |
+| `0` | Verified and non-blocking |
+| `2` | Unsupported or invalid Git/dbt input |
+| `3` | Missing or incomplete DataHub context |
+| `4` | Verified unsafe downstream impact |
+| `5` | Generated remediation failed validation |
+| `6` | DataHub write-back failed or was partial |
 
-**The skeleton stays the same; you swap the goal.**
+## Development and proof
 
-## Make it your own
+- [Verification guide](docs/verification.md)
+- [Design specification](docs/superpowers/specs/2026-08-04-cutset-design.md)
+- [Implementation plan](docs/superpowers/plans/2026-08-04-cutset-vertical-slice.md)
+- [GitHub Actions workflow](.github/workflows/cutset.yml)
 
-Open `goal.py` and rewrite `GOAL` — the tools and loop don't change, only your intent does:
+```bash
+pytest -q
+python -m cutset.cli --help
+git diff --check
+```
 
-- **Do real work** — find a dataset with a problem, fix it, write it back (the default here)
-- **Generate code** — read real schemas + lineage, then generate a dbt model / SQL / DAG with real column names
-- **Protect ML models** — trace lineage from training data to deployed models, flag what's at risk
-- **Your idea** — anything that benefits from grounded catalog context
-
-`goal.py` has commented example goals for each. See `prompts/` for AI-coding-assistant prompts to build or extend the agent.
-
-## Resources
-
-- [DataHub](https://datahub.com) · [Quickstart](https://docs.datahub.com/docs/quickstart) · [MCP Server](https://docs.datahub.com/docs/features/feature-guides/mcp) · [Agent Context Kit](https://docs.datahub.com/docs/dev-guides/agent-context/agent-context) · [DataHub Skills](https://github.com/datahub-project/datahub-skills)
-- [Analytics Agent](https://github.com/datahub-project/analytics-agent) — a production-grade, open-source DataHub agent worth studying
+The repository started from DataHub's official Agent Starter. The original `agent.py` and `goal.py` remain as provenance/reference; the shipped Cutset package lives under `src/cutset/`. Starter attribution is preserved in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ## License
 
-Apache License 2.0 — see [`LICENSE`](LICENSE). The incorporated DataHub Agent Starter attribution is preserved in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
+Apache License 2.0. See [LICENSE](LICENSE).

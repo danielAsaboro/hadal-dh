@@ -37,7 +37,7 @@ def _deterministic_remediation(evidence: ImpactEvidence) -> GeneratedRemediation
     draft = RemediationDraft(
         sql=(
             f"select {change.old_name} as {change.new_name} "
-            f"from {change.model_name}"
+            "from upstream"
         ),
         schema_yaml=(
             "version: 2\n"
@@ -79,4 +79,3 @@ def analyze(
         decision=decision,
         remediation=remediation,
     )
-

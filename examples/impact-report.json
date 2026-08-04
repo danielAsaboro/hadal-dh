@@ -1,0 +1,42 @@
+{
+  "analysis_key": "1d4d82709b61a9577412",
+  "base": "abc123",
+  "change": {
+    "model_name": "customers",
+    "new_name": "email_address",
+    "old_name": "email",
+    "source_path": "models/customers.yml"
+  },
+  "decision": {
+    "blocks_merge": true,
+    "reason": "ml_assets_affected",
+    "severity": "critical"
+  },
+  "evidence": {
+    "complete": true,
+    "lineage_paths": [
+      {
+        "column": "email",
+        "downstream": {
+          "asset_type": "mlModel",
+          "name": "churn_prediction_v2",
+          "urn": "urn:li:mlModel:churn_prediction_v2"
+        },
+        "source": {
+          "asset_type": "dataset",
+          "name": "analytics.customers",
+          "urn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.customers,PROD)"
+        }
+      }
+    ],
+    "schema_fields": ["customer_id", "email"],
+    "source": {
+      "asset_type": "dataset",
+      "name": "analytics.customers",
+      "urn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.customers,PROD)"
+    }
+  },
+  "head": "def456",
+  "repository": "acme/warehouse"
+}
+

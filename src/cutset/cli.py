@@ -64,3 +64,7 @@ def review(
         raise typer.Exit(5)
     if report.decision.blocks_merge:
         raise typer.Exit(4)
+
+
+if __name__ == "__main__":
+    app()

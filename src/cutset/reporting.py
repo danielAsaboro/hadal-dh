@@ -57,6 +57,45 @@ def _payload(report: ImpactReport) -> dict[str, Any]:
             "complete": report.evidence.complete,
             "source": _asset(report.evidence.source),
             "schema_fields": sorted(report.evidence.schema_fields),
+            "asset_contexts": [
+                {
+                    "asset": _asset(context.asset),
+                    "owners": [_asset(owner) for owner in context.owners],
+                    "tags": [_asset(tag) for tag in context.tags],
+                    "glossary_terms": [
+                        _asset(term) for term in context.glossary_terms
+                    ],
+                    "incident_statuses": list(context.incident_statuses),
+                    "query_total": context.query_total,
+                    "queries": [
+                        {
+                            "urn": query.urn,
+                            "source": query.source,
+                            "language": query.language,
+                            "name": query.name,
+                            "statement": query.statement,
+                            "subjects": list(query.subjects),
+                        }
+                        for query in context.queries
+                    ],
+                    "quality": {
+                        "total": context.quality.total,
+                        "failing": context.quality.failing,
+                        "errors": context.quality.errors,
+                        "sample": [
+                            {
+                                "urn": assertion.urn,
+                                "assertion_type": assertion.assertion_type,
+                                "column": assertion.column,
+                                "status": assertion.status,
+                            }
+                            for assertion in context.quality.sample
+                        ],
+                    },
+                    "complete": context.complete,
+                }
+                for context in report.evidence.asset_contexts
+            ],
             "lineage_paths": [
                 {
                     "column": path.column,
@@ -118,6 +157,32 @@ def render_markdown(report: ImpactReport) -> str:
             factors = ", ".join(item.factors)
             lines.append(
                 f"- `{item.asset.name}` — score `{item.score}` — {factors}"
+            )
+
+    if report.evidence.asset_contexts:
+        lines.extend(["", "## DataHub context", ""])
+        for context in report.evidence.asset_contexts:
+            owners = ", ".join(owner.name for owner in context.owners) or "unowned"
+            tags = ", ".join(tag.name for tag in context.tags) or "none"
+            terms = ", ".join(term.name for term in context.glossary_terms) or "none"
+            incidents = ", ".join(context.incident_statuses) or "none"
+            lines.extend(
+                [
+                    f"### {context.asset.name}",
+                    "",
+                    f"- Owners: {owners}",
+                    f"- Tags: {tags}",
+                    f"- Glossary terms: {terms}",
+                    f"- Usage queries: `{context.query_total}`",
+                    (
+                        "- Quality: "
+                        f"`{context.quality.failing}` failing, "
+                        f"`{context.quality.errors}` errors"
+                    ),
+                    f"- Incident statuses: {incidents}",
+                    f"- Context complete: `{str(context.complete).lower()}`",
+                    "",
+                ]
             )
 
     if report.remediation is not None:

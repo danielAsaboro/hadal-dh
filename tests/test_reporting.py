@@ -2,6 +2,7 @@ import json
 from dataclasses import replace
 
 from cutset.domain import (
+    AssetContext,
     AssetRef,
     ColumnRename,
     ImpactDecision,
@@ -10,6 +11,7 @@ from cutset.domain import (
     ReasonCode,
     RankedImpact,
     Severity,
+    UsageQuery,
 )
 from cutset.policy import analysis_key
 from cutset.remediation import GeneratedRemediation, RemediationDraft, ValidationResult
@@ -105,3 +107,36 @@ def test_reports_remediation_grounding_and_query_citation() -> None:
     assert "Supporting query: `urn:li:query:q1`" in markdown
     assert payload["remediation"]["grounding_mode"] == "query_grounded"
     assert payload["remediation"]["supporting_query_urn"] == "urn:li:query:q1"
+
+
+def test_json_contains_normalized_asset_context_without_raw_literals() -> None:
+    report = _critical_report()
+    source = report.evidence.source
+    query = UsageQuery(
+        "urn:li:query:q1",
+        "SYSTEM",
+        "SQL",
+        "customer usage",
+        "SELECT email FROM analytics.customers WHERE region = ?",
+        (source.urn,),
+    )
+    evidence = replace(
+        report.evidence,
+        asset_contexts=(
+            AssetContext(
+                asset=source,
+                owners=(AssetRef("urn:li:corpuser:alice", "corpuser", "Alice"),),
+                query_total=1,
+                queries=(query,),
+            ),
+        ),
+    )
+    report = replace(report, evidence=evidence)
+
+    payload = json.loads(render_json(report))
+    markdown = render_markdown(report)
+
+    assert payload["evidence"]["asset_contexts"][0]["owners"][0]["name"] == "Alice"
+    assert payload["evidence"]["asset_contexts"][0]["queries"][0]["statement"].endswith("= ?")
+    assert "## DataHub context" in markdown
+    assert "Alice" in markdown

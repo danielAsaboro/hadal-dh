@@ -6,6 +6,8 @@ import pytest
 from cutset.datahub_gateway import DataHubGateway
 from cutset.domain import ColumnRename
 from cutset.policy import analysis_key, decide
+from cutset.ranking import rank_impacts
+from cutset.remediation import select_remediation_grounding
 from cutset.reporting import ImpactReport
 
 
@@ -41,6 +43,21 @@ def test_collects_evidence_from_live_datahub() -> None:
         path.downstream.asset_type == "mlModel"
         for path in evidence.lineage_paths
     )
+    source_context = next(
+        context for context in evidence.asset_contexts if context.asset.urn == dataset_urn
+    )
+    assert source_context.owners
+    assert any(tag.name == "Customer Data" for tag in source_context.tags)
+    assert any(
+        term.name == "Customer Identity" for term in source_context.glossary_terms
+    )
+    assert source_context.query_total >= 1
+    assert source_context.queries
+    assert "'NG'" not in source_context.queries[0].statement
+    assert rank_impacts(evidence)[0].asset.asset_type == "mlModel"
+    grounding = select_remediation_grounding(evidence)
+    assert grounding.mode == "query_grounded"
+    assert grounding.query_urn == "urn:li:query:cutset-customer-feature-extraction"
 
 
 @pytest.mark.integration

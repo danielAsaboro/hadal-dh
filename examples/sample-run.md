@@ -38,14 +38,20 @@ DATAHUB_GMS_URL=http://localhost:8080 cutset review \
 - Exit code: `4`
 - Analysis key: `6de99d594317f8d18474`
 - Remediation validation: `VALID`
+- Top-ranked impact: `churn_prediction_v2` (score `145`)
+- Usage grounding: `urn:li:query:cutset-customer-feature-extraction`
 
 The report preserved both the exact field path
 `email -> email_hash` and the exact entity path through the training job to the
-ML model. DataHub saved one related impact document and applied the existing
+ML model. It also normalized the source owner, `Customer Data` tag, `Customer
+Identity` glossary term, zero failing/error assertions, and one system query.
+The query's raw `'NG'` literal was redacted to `?` in the report, while its
+verified relation grounded the compatibility SQL in `analytics.customers`.
+DataHub saved one related impact document and applied the existing
 `cutset-at-risk` tag to the affected datasets and model.
 
 The identical command was then run a second time. Both JSON reports had SHA-256
-`ed5ecc563fe23946b756d67c92cc1b3d1c4a75549f586c8c9191e3a4fadff137`, and
+`add523a1a43d43d87855aa44d20305bba5d44c5383bae1f32f8022f6836feb71`, and
 both Markdown reports had SHA-256
-`4d40c231f5ea5479965c5fe6f70692940c2424d70765a9f954191f43b17a1f38`.
+`c402c48d62ba2c658e7f615c9be3052623aa9433c1d5f863db59f9d5a3af6f60`.
 The second write updated the same DataHub document rather than creating another.

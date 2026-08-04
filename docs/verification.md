@@ -33,15 +33,20 @@ set -a; source .env; set +a
 Verify all four artifacts before recording the demo:
 
 1. `impact-report.json` and `impact-report.md` exist even when the verdict blocks.
-2. The report source URN and downstream URNs match the DataHub API/UI.
-3. DataHub contains a related `Analysis` document with the same Cutset analysis key.
-4. A second identical run updates the same document instead of creating a duplicate.
+2. The report source URN, downstream URNs, owner, tags, glossary terms, query total, and quality totals match DataHub.
+3. Query literals are absent from the report and the compatibility SQL cites its supporting query URN.
+4. Ranked impact places the governed ML consumer above the intermediate dataset without changing policy.
+5. DataHub contains a related `Analysis` document with the same Cutset analysis key.
+6. A second identical run updates the same document instead of creating a duplicate.
 
 This checklist was completed on 2026-08-04 against the official DataHub v1.6.0
 Docker quickstart. The two runs produced byte-identical JSON and Markdown
 reports, updated one stable DataHub document, and left the existing
 `cutset-at-risk` tag on every affected asset. See the sanitized
 [live transcript](../examples/sample-run.md).
+
+The current local suite result is `67 passed, 2 skipped`; the two skips are the
+explicitly configured live integration tests.
 
 To reproduce the controlled metadata graph before running the checklist:
 

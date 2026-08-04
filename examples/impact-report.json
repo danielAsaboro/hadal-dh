@@ -13,6 +13,118 @@
     "severity": "critical"
   },
   "evidence": {
+    "asset_contexts": [
+      {
+        "asset": {
+          "asset_type": "dataset",
+          "name": "Customers",
+          "urn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.customers,PROD)"
+        },
+        "complete": true,
+        "glossary_terms": [
+          {
+            "asset_type": "glossaryterm",
+            "name": "Customer Identity",
+            "urn": "urn:li:glossaryTerm:customer-identity"
+          }
+        ],
+        "incident_statuses": [
+          "PASS"
+        ],
+        "owners": [
+          {
+            "asset_type": "corpuser",
+            "name": "urn:li:corpuser:cutset-demo",
+            "urn": "urn:li:corpuser:cutset-demo"
+          }
+        ],
+        "quality": {
+          "errors": 0,
+          "failing": 0,
+          "sample": [],
+          "total": 0
+        },
+        "queries": [
+          {
+            "language": "SQL",
+            "name": "Customer feature extraction",
+            "source": "SYSTEM",
+            "statement": "SELECT customer_id, email FROM analytics.customers WHERE region = ?",
+            "subjects": [
+              "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.customers,PROD)"
+            ],
+            "urn": "urn:li:query:cutset-customer-feature-extraction"
+          }
+        ],
+        "query_total": 1,
+        "tags": [
+          {
+            "asset_type": "tag",
+            "name": "Customer Data",
+            "urn": "urn:li:tag:customer-data"
+          },
+          {
+            "asset_type": "tag",
+            "name": "Cutset: At Risk",
+            "urn": "urn:li:tag:cutset-at-risk"
+          }
+        ]
+      },
+      {
+        "asset": {
+          "asset_type": "dataset",
+          "name": "Customer Features",
+          "urn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.customer_features,PROD)"
+        },
+        "complete": true,
+        "glossary_terms": [],
+        "incident_statuses": [
+          "PASS"
+        ],
+        "owners": [],
+        "quality": {
+          "errors": 0,
+          "failing": 0,
+          "sample": [],
+          "total": 0
+        },
+        "queries": [],
+        "query_total": 0,
+        "tags": [
+          {
+            "asset_type": "tag",
+            "name": "Cutset: At Risk",
+            "urn": "urn:li:tag:cutset-at-risk"
+          }
+        ]
+      },
+      {
+        "asset": {
+          "asset_type": "mlModel",
+          "name": "churn_prediction_v2",
+          "urn": "urn:li:mlModel:(urn:li:dataPlatform:mlflow,churn_prediction_v2,PROD)"
+        },
+        "complete": true,
+        "glossary_terms": [],
+        "incident_statuses": [],
+        "owners": [],
+        "quality": {
+          "errors": 0,
+          "failing": 0,
+          "sample": [],
+          "total": 0
+        },
+        "queries": [],
+        "query_total": 0,
+        "tags": [
+          {
+            "asset_type": "tag",
+            "name": "Cutset: At Risk",
+            "urn": "urn:li:tag:cutset-at-risk"
+          }
+        ]
+      }
+    ],
     "complete": true,
     "lineage_paths": [
       {
@@ -93,11 +205,40 @@
     }
   },
   "head": "4f508e2cc3eb62606eca106c146b429c74f14681",
+  "ranked_impacts": [
+    {
+      "asset": {
+        "asset_type": "mlModel",
+        "name": "churn_prediction_v2",
+        "urn": "urn:li:mlModel:(urn:li:dataPlatform:mlflow,churn_prediction_v2,PROD)"
+      },
+      "factors": [
+        "ml_asset",
+        "column_mapping",
+        "missing_owner"
+      ],
+      "score": 145
+    },
+    {
+      "asset": {
+        "asset_type": "dataset",
+        "name": "Customer Features",
+        "urn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.customer_features,PROD)"
+      },
+      "factors": [
+        "column_mapping",
+        "missing_owner"
+      ],
+      "score": 45
+    }
+  ],
   "remediation": {
     "errors": [],
-    "explanation": "Compatibility alias grounded in the verified DataHub schema.",
+    "explanation": "Compatibility alias grounded in observed DataHub SQL usage.",
+    "grounding_mode": "query_grounded",
     "schema_yaml": "version: 2\nmodels:\n  - name: customers\n    columns:\n      - name: email_address\n        tests:\n          - not_null\n",
-    "sql": "select email as email_address from upstream",
+    "sql": "select email as email_address from analytics.customers",
+    "supporting_query_urn": "urn:li:query:cutset-customer-feature-extraction",
     "valid": true
   },
   "repository": "cutset/live-demo"

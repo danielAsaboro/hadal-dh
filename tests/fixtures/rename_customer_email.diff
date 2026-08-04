@@ -1,0 +1,8 @@
+diff --git a/models/customers.yml b/models/customers.yml
+index 375c32a..cd75dd2 100644
+--- a/models/customers.yml
++++ b/models/customers.yml
+@@ -8 +8 @@ models:
+-      - name: email
++      - name: email_address
+

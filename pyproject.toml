@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cutset"
+version = "0.1.0"
+description = "Know what breaks before you merge."
+readme = "README.md"
+requires-python = ">=3.11,<3.14"
+license = "Apache-2.0"
+dependencies = [
+  "PyYAML>=6.0",
+  "typer>=0.12",
+  "datahub-agent-context[langchain]",
+  "langgraph",
+  "langchain-anthropic",
+  "python-dotenv",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8",
+  "pytest-cov>=5",
+]
+
+[project.scripts]
+cutset = "cutset.cli:app"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+

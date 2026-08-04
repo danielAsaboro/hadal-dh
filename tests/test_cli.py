@@ -50,6 +50,23 @@ class _FailingWriteGateway(_CapturedGateway):
         raise DataHubWriteBackError("write failed")
 
 
+class _IncompleteGateway(_CapturedGateway):
+    write_attempted = False
+
+    def collect_evidence(self, change, max_hops=3):
+        evidence = super().collect_evidence(change, max_hops)
+        return ImpactEvidence(
+            source=evidence.source,
+            lineage_paths=evidence.lineage_paths,
+            complete=False,
+            change=change,
+            schema_fields=evidence.schema_fields,
+        )
+
+    def write_back(self, report, tag_name="cutset-at-risk"):
+        self.write_attempted = True
+
+
 def test_cli_uses_real_git_and_writes_reports(tmp_path: Path, monkeypatch) -> None:
     repo = _repo_with_rename(tmp_path)
     output = tmp_path / "reports"
@@ -104,3 +121,28 @@ def test_cli_preserves_reports_when_write_back_fails(tmp_path: Path, monkeypatch
 
     assert result.exit_code == 6
     assert (output / "impact-report.json").exists()
+
+
+def test_cli_never_writes_back_incomplete_evidence(tmp_path: Path, monkeypatch) -> None:
+    repo = _repo_with_rename(tmp_path)
+    gateway = _IncompleteGateway()
+    monkeypatch.setattr("cutset.cli.DataHubGateway.from_env", lambda: gateway)
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "review",
+            "--repo",
+            str(repo),
+            "--base",
+            "HEAD~1",
+            "--head",
+            "HEAD",
+            "--output",
+            str(tmp_path / "reports"),
+            "--write-back",
+        ],
+    )
+
+    assert result.exit_code == 3
+    assert gateway.write_attempted is False

@@ -55,7 +55,7 @@ def _asset_from_entity(entity: Mapping[str, Any]) -> AssetRef:
         raise DataHubContextError("DataHub entity response omitted a valid URN")
     properties = entity.get("properties")
     property_name = properties.get("name") if isinstance(properties, Mapping) else None
-    name = property_name or entity.get("name") or urn
+    name = property_name or entity.get("name") or entity.get("fieldPath") or urn
     return AssetRef(urn=urn, asset_type=_entity_type(entity), name=str(name))
 
 
@@ -66,7 +66,10 @@ def normalize_lineage(
 ) -> tuple[tuple[LineagePath, ...], bool]:
     """Normalize downstream lineage and expose any pagination as incompleteness."""
     payload = _as_mapping(response, "get_lineage")
-    downstreams = _as_mapping(payload.get("downstreams", {}), "get_lineage")
+    raw_downstreams = payload.get("downstreams")
+    if not isinstance(raw_downstreams, Mapping):
+        return (), False
+    downstreams = raw_downstreams
     raw_results = downstreams.get("searchResults", [])
     if not isinstance(raw_results, list):
         raise DataHubContextError("get_lineage returned invalid search results")
@@ -83,17 +86,81 @@ def normalize_lineage(
                 source=source,
                 downstream=_asset_from_entity(entity),
                 column=column,
+                degree=str(result.get("degree", "unknown")),
+                downstream_columns=tuple(
+                    str(value)
+                    for value in result.get("lineageColumns", [])
+                    if isinstance(value, str)
+                )
+                if isinstance(result.get("lineageColumns", []), list)
+                else (),
             )
         )
 
-    returned = downstreams.get("returned", len(raw_results))
-    total = downstreams.get("total", returned)
-    complete = not bool(
-        downstreams.get("hasMore")
+    returned = downstreams.get("returned")
+    total = downstreams.get("total")
+    has_more = downstreams.get("hasMore")
+    offset = downstreams.get("offset")
+    metadata_complete = (
+        isinstance(returned, int)
+        and isinstance(total, int)
+        and isinstance(has_more, bool)
+        and isinstance(offset, int)
+        and returned == len(raw_results)
+    )
+    explicitly_empty = (
+        not raw_results
+        and downstreams.get("start") == 0
+        and downstreams.get("count") == 0
+        and downstreams.get("total") == 0
+    )
+    complete = (metadata_complete or explicitly_empty) and not bool(
+        has_more
         or downstreams.get("truncatedDueToTokenBudget")
         or (isinstance(total, int) and isinstance(returned, int) and returned < total)
     )
     return tuple(paths), complete
+
+
+def _normalize_exact_paths(
+    summary: LineagePath,
+    response: object,
+) -> tuple[LineagePath, ...]:
+    payload = _as_mapping(response, "get_lineage_paths_between")
+    metadata = payload.get("metadata")
+    target = payload.get("target")
+    raw_paths = payload.get("paths")
+    path_count = payload.get("pathCount")
+    if (
+        not isinstance(metadata, Mapping)
+        or metadata.get("direction") != "downstream"
+        or not isinstance(target, Mapping)
+        or target.get("urn") != summary.downstream.urn
+        or not isinstance(raw_paths, list)
+        or not isinstance(path_count, int)
+        or path_count != len(raw_paths)
+        or path_count < 1
+    ):
+        raise DataHubContextError("exact lineage path response is incomplete")
+
+    normalized: list[LineagePath] = []
+    for raw_path in raw_paths:
+        if not isinstance(raw_path, Mapping) or not isinstance(raw_path.get("path"), list):
+            raise DataHubContextError("exact lineage path response is malformed")
+        raw_nodes = raw_path["path"]
+        if not raw_nodes or not all(isinstance(node, Mapping) for node in raw_nodes):
+            raise DataHubContextError("exact lineage path omitted path nodes")
+        normalized.append(
+            LineagePath(
+                source=summary.source,
+                downstream=summary.downstream,
+                column=summary.column,
+                degree=summary.degree,
+                downstream_columns=summary.downstream_columns,
+                nodes=tuple(_asset_from_entity(node) for node in raw_nodes),
+            )
+        )
+    return tuple(normalized)
 
 
 class DataHubGateway:
@@ -105,11 +172,14 @@ class DataHubGateway:
 
     @classmethod
     def from_env(cls) -> "DataHubGateway":
-        client = DataHubClient.from_env()
-        return cls(
-            client=client,
-            tools=build_langchain_tools(client, include_mutations=True),
-        )
+        try:
+            client = DataHubClient.from_env()
+            return cls(
+                client=client,
+                tools=build_langchain_tools(client, include_mutations=True),
+            )
+        except Exception as error:
+            raise DataHubContextError("could not initialize the DataHub client") from error
 
     def _invoke(self, name: str, arguments: dict[str, object]) -> object:
         tool = self.tools.get(name)
@@ -136,6 +206,9 @@ class DataHubGateway:
         raw_results = response.get("searchResults", [])
         if not isinstance(raw_results, list):
             raise DataHubContextError("search returned invalid results")
+        total = response.get("total")
+        if not isinstance(total, int) or total > len(raw_results):
+            raise DataHubContextError("DataHub asset search results are incomplete")
 
         candidates: list[AssetRef] = []
         for result in raw_results:
@@ -210,9 +283,28 @@ class DataHubGateway:
             },
         )
         paths, lineage_complete = normalize_lineage(source, change.old_name, lineage)
+        exact_paths: list[LineagePath] = []
+        if lineage_complete:
+            for summary in paths:
+                target_columns: tuple[str | None, ...] = (
+                    summary.downstream_columns
+                    if summary.downstream_columns
+                    else (None,)
+                )
+                for target_column in target_columns:
+                    arguments: dict[str, object] = {
+                        "source_urn": source.urn,
+                        "target_urn": summary.downstream.urn,
+                        "direction": "downstream",
+                    }
+                    if target_column is not None:
+                        arguments["source_column"] = change.old_name
+                        arguments["target_column"] = target_column
+                    response = self._invoke("get_lineage_paths_between", arguments)
+                    exact_paths.extend(_normalize_exact_paths(summary, response))
         return ImpactEvidence(
             source=source,
-            lineage_paths=paths,
+            lineage_paths=tuple(exact_paths) if lineage_complete else paths,
             complete=schema_complete and lineage_complete,
             change=change,
             schema_fields=schema_fields,
@@ -234,6 +326,9 @@ class DataHubGateway:
         raw_results = response.get("searchResults", [])
         if not isinstance(raw_results, list):
             raise DataHubWriteBackError("tag search returned invalid results")
+        total = response.get("total")
+        if not isinstance(total, int) or total > len(raw_results):
+            raise DataHubWriteBackError("tag search results are incomplete")
         matches: dict[str, AssetRef] = {}
         for result in raw_results:
             if not isinstance(result, Mapping):
@@ -255,7 +350,7 @@ class DataHubGateway:
             self._invoke(
                 "search_documents",
                 {
-                    "query": f"/q {analysis_key}",
+                    "query": f'/q "Cutset impact {analysis_key}"',
                     "num_results": 10,
                     "offset": 0,
                 },
@@ -265,12 +360,18 @@ class DataHubGateway:
         raw_results = response.get("searchResults", [])
         if not isinstance(raw_results, list):
             raise DataHubWriteBackError("document search returned invalid results")
+        total = response.get("total")
+        if not isinstance(total, int) or total > len(raw_results):
+            raise DataHubWriteBackError("document search results are incomplete")
+        expected_title = f"Cutset impact {analysis_key}"
         urns = {
             entity["urn"]
             for result in raw_results
             if isinstance(result, Mapping)
             and isinstance((entity := result.get("entity")), Mapping)
             and isinstance(entity.get("urn"), str)
+            and isinstance(entity.get("info"), Mapping)
+            and entity["info"].get("title") == expected_title
         }
         if len(urns) > 1:
             raise DataHubWriteBackError(
@@ -293,7 +394,6 @@ class DataHubGateway:
             raise DataHubWriteBackError("write-back target was absent from current evidence")
 
         try:
-            tag_urn = self._resolve_tag(tag_name)
             existing_document = self._existing_document_urn(report.analysis_key)
             save_arguments: dict[str, object] = {
                 "document_type": "Analysis",
@@ -313,15 +413,19 @@ class DataHubGateway:
             if not isinstance(document_urn, str) or not document_urn.startswith("urn:li:"):
                 raise DataHubWriteBackError("save_document omitted its document URN")
 
-            tag_response = _as_mapping(
-                self._invoke(
+            tagged_urns: tuple[str, ...] = ()
+            if report.decision.blocks_merge:
+                tag_urn = self._resolve_tag(tag_name)
+                tag_response = _as_mapping(
+                    self._invoke(
+                        "add_tags",
+                        {"tag_urns": [tag_urn], "entity_urns": target_urns},
+                    ),
                     "add_tags",
-                    {"tag_urns": [tag_urn], "entity_urns": target_urns},
-                ),
-                "add_tags",
-            )
-            if tag_response.get("success") is not True:
-                raise DataHubWriteBackError("add_tags did not succeed")
+                )
+                if tag_response.get("success") is not True:
+                    raise DataHubWriteBackError("add_tags did not succeed")
+                tagged_urns = tuple(target_urns)
         except DataHubWriteBackError:
             raise
         except DataHubContextError as error:
@@ -330,6 +434,6 @@ class DataHubGateway:
         return WriteBackResult(
             success=True,
             document_urn=document_urn,
-            tagged_urns=tuple(target_urns),
+            tagged_urns=tagged_urns,
             updated_existing_document=existing_document is not None,
         )

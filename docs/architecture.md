@@ -9,7 +9,7 @@ Git base/head
 dbt diff parser ── unsupported/ambiguous ──► exit 2
     │
     ▼
-DataHub search → entity confirmation → schema → column lineage
+DataHub search → entity confirmation → schema → column lineage → exact paths
     │                                      │
     │                         incomplete ──► exit 3
     ▼
@@ -40,6 +40,9 @@ normalized immutable evidence
 - `get_entities` confirms the resolved source asset.
 - `list_schema_fields` verifies the old column.
 - `get_lineage` traces downstream column consumers through three hops.
+- `get_lineage_paths_between` preserves intermediate assets, queries, and columns for audit.
 - `search_documents` finds an existing analysis by stable key.
 - `save_document` creates or updates the impact analysis.
 - `add_tags` marks the affected assets with an existing catalog tag.
+
+The GitHub workflow runs on `pull_request_target`, installs Cutset only from the trusted base commit, and checks out the PR head into a separate directory treated strictly as Git diff data. DataHub secrets are additionally gated by the protected `datahub-review` environment; candidate code is never imported or executed.

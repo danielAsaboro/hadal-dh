@@ -22,6 +22,9 @@ class LineagePath:
     source: AssetRef
     downstream: AssetRef
     column: str
+    degree: str = "1"
+    downstream_columns: tuple[str, ...] = ()
+    nodes: tuple[AssetRef, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

@@ -26,3 +26,33 @@ def test_rejects_multiple_column_changes() -> None:
 
     with pytest.raises(UnsupportedChangeError, match="exactly one"):
         parse_column_rename(diff)
+
+
+def test_rejects_a_model_rename_as_a_column_change() -> None:
+    diff = """\
+diff --git a/models/schema.yml b/models/schema.yml
+--- a/models/schema.yml
++++ b/models/schema.yml
+@@ -2 +2 @@ models:
+-  - name: customers
++  - name: clients
+"""
+
+    with pytest.raises(UnsupportedChangeError, match="column"):
+        parse_column_rename(diff)
+
+
+def test_uses_containing_model_instead_of_yaml_filename() -> None:
+    diff = """\
+diff --git a/models/schema.yml b/models/schema.yml
+--- a/models/schema.yml
++++ b/models/schema.yml
+@@ -1,5 +1,5 @@
+ models:
+   - name: customers
+     columns:
+-      - name: email
++      - name: email_address
+"""
+
+    assert parse_column_rename(diff).model_name == "customers"

@@ -12,7 +12,7 @@
 
 ## Downstream evidence
 
-- `mlModel` — `urn:li:mlModel:churn_prediction_v2`
+- `mlModel` — `urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.customers,PROD)` → `urn:li:query:build-customer-features` → `urn:li:mlModel:churn_prediction_v2`
 
 ## Suggested compatibility patch: VALID
 
@@ -20,4 +20,4 @@
 select email as email_address from upstream
 ```
 
-CUTSET ANALYSIS KEY: `1d4d82709b61a9577412`
+CUTSET ANALYSIS KEY: `325bc4f10b2f09f08ac1`

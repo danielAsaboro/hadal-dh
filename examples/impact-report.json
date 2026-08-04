@@ -1,6 +1,6 @@
 {
-  "analysis_key": "1d4d82709b61a9577412",
-  "base": "abc123",
+  "analysis_key": "325bc4f10b2f09f08ac1",
+  "base": "fd24a8c4b74453472e3d2cc93703692ab719aceb",
   "change": {
     "model_name": "customers",
     "new_name": "email_address",
@@ -17,11 +17,30 @@
     "lineage_paths": [
       {
         "column": "email",
+        "degree": "3+",
+        "downstream_columns": [],
         "downstream": {
           "asset_type": "mlModel",
           "name": "churn_prediction_v2",
           "urn": "urn:li:mlModel:churn_prediction_v2"
         },
+        "nodes": [
+          {
+            "asset_type": "dataset",
+            "name": "analytics.customers",
+            "urn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.customers,PROD)"
+          },
+          {
+            "asset_type": "query",
+            "name": "urn:li:query:build-customer-features",
+            "urn": "urn:li:query:build-customer-features"
+          },
+          {
+            "asset_type": "mlModel",
+            "name": "churn_prediction_v2",
+            "urn": "urn:li:mlModel:churn_prediction_v2"
+          }
+        ],
         "source": {
           "asset_type": "dataset",
           "name": "analytics.customers",
@@ -36,6 +55,13 @@
       "urn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.customers,PROD)"
     }
   },
-  "head": "def456",
+  "head": "f5469312255d5a17f0d7ca390aa32c81734154ca",
+  "remediation": {
+    "errors": [],
+    "explanation": "Compatibility alias grounded in the verified DataHub schema.",
+    "schema_yaml": "version: 2\nmodels:\n  - name: customers\n    columns:\n      - name: email_address\n        tests:\n          - not_null\n",
+    "sql": "select email as email_address from upstream",
+    "valid": true
+  },
   "repository": "acme/warehouse"
 }

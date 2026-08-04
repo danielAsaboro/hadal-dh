@@ -49,6 +49,20 @@ def _verify_revision(repo: Path, revision: str) -> None:
         raise GitContextError(f"invalid Git revision: {revision}") from error
 
 
+def resolve_git_revision(repo: Path, revision: str) -> str:
+    """Resolve a validated revision to its immutable full commit SHA."""
+    _verify_repository(repo)
+    _verify_revision(repo, revision)
+    result = _run(
+        repo,
+        "rev-parse",
+        "--verify",
+        "--end-of-options",
+        f"{revision}^{{commit}}",
+    )
+    return result.stdout.strip()
+
+
 def read_git_diff(request: GitDiffRequest) -> str:
     """Return relevant dbt changes between two validated Git revisions."""
     _verify_repository(request.repo)
@@ -57,7 +71,7 @@ def read_git_diff(request: GitDiffRequest) -> str:
     result = _run(
         request.repo,
         "diff",
-        "--unified=0",
+        "--unified=10000",
         request.base,
         request.head,
         "--",

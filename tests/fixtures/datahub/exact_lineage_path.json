@@ -1,0 +1,36 @@
+{
+  "metadata": {
+    "queryType": "lineage-path-trace",
+    "direction": "downstream",
+    "pathType": "column-level"
+  },
+  "source": {
+    "urn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.customers,PROD)",
+    "column": "email"
+  },
+  "target": {
+    "urn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.customer_features,PROD)",
+    "column": "email_hash"
+  },
+  "pathCount": 1,
+  "paths": [
+    {
+      "path": [
+        {
+          "urn": "urn:li:schemaField:(urn:li:dataset:customers,email)",
+          "type": "SCHEMA_FIELD",
+          "fieldPath": "email"
+        },
+        {
+          "urn": "urn:li:query:hash-customer-email",
+          "type": "QUERY"
+        },
+        {
+          "urn": "urn:li:schemaField:(urn:li:dataset:customer_features,email_hash)",
+          "type": "SCHEMA_FIELD",
+          "fieldPath": "email_hash"
+        }
+      ]
+    }
+  ]
+}

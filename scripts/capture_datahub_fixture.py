@@ -35,6 +35,40 @@ def main() -> None:
         },
     )
     urn = _entity(search)["urn"]
+    lineage = gateway._invoke(
+        "get_lineage",
+        {
+            "urn": urn,
+            "column": args.column,
+            "upstream": False,
+            "max_hops": 3,
+            "max_results": 50,
+            "offset": 0,
+        },
+    )
+    exact_paths = []
+    if isinstance(lineage, dict):
+        downstreams = lineage.get("downstreams", {})
+        results = downstreams.get("searchResults", []) if isinstance(downstreams, dict) else []
+        for result in results if isinstance(results, list) else []:
+            entity = result.get("entity", {}) if isinstance(result, dict) else {}
+            target_urn = entity.get("urn") if isinstance(entity, dict) else None
+            columns = result.get("lineageColumns", []) if isinstance(result, dict) else []
+            if not isinstance(target_urn, str):
+                continue
+            for target_column in columns or [None]:
+                path_args = {
+                    "source_urn": urn,
+                    "target_urn": target_urn,
+                    "direction": "downstream",
+                }
+                if isinstance(target_column, str):
+                    path_args["source_column"] = args.column
+                    path_args["target_column"] = target_column
+                exact_paths.append(
+                    gateway._invoke("get_lineage_paths_between", path_args)
+                )
+
     transcript = {
         "search": search,
         "get_entities": gateway._invoke("get_entities", {"urns": [urn]}),
@@ -42,17 +76,8 @@ def main() -> None:
             "list_schema_fields",
             {"urn": urn, "keywords": [args.column], "limit": 100, "offset": 0},
         ),
-        "get_lineage": gateway._invoke(
-            "get_lineage",
-            {
-                "urn": urn,
-                "column": args.column,
-                "upstream": False,
-                "max_hops": 3,
-                "max_results": 50,
-                "offset": 0,
-            },
-        ),
+        "get_lineage": lineage,
+        "get_lineage_paths_between": exact_paths,
     }
     print(json.dumps(transcript, indent=2, sort_keys=True))
 

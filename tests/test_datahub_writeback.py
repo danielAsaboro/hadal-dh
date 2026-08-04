@@ -44,6 +44,25 @@ def _report() -> ImpactReport:
     )
 
 
+def _safe_report() -> ImpactReport:
+    report = _report()
+    return ImpactReport(
+        analysis_key=report.analysis_key,
+        repository=report.repository,
+        base=report.base,
+        head=report.head,
+        change=report.change,
+        evidence=ImpactEvidence(
+            source=report.evidence.source,
+            lineage_paths=(),
+            complete=True,
+        ),
+        decision=ImpactDecision(
+            Severity.INFO, False, ReasonCode.NO_DOWNSTREAM_CONSUMERS
+        ),
+    )
+
+
 def _gateway(tag_success: bool = True) -> DataHubGateway:
     return DataHubGateway(
         client=object(),
@@ -59,7 +78,8 @@ def _gateway(tag_success: bool = True) -> DataHubGateway:
                                 "properties": {"name": "cutset-at-risk"},
                             }
                         }
-                    ]
+                    ],
+                    "total": 1,
                 },
             ),
             _Tool("search_documents", {"searchResults": [], "total": 0}),
@@ -98,3 +118,52 @@ def test_partial_write_back_is_a_failure() -> None:
 
     with pytest.raises(DataHubWriteBackError, match="add_tags"):
         gateway.write_back(_report(), tag_name="cutset-at-risk")
+
+
+def test_non_blocking_report_is_documented_without_risk_tag() -> None:
+    gateway = _gateway()
+
+    result = gateway.write_back(_safe_report(), tag_name="cutset-at-risk")
+
+    assert result.success is True
+    assert result.tagged_urns == ()
+    assert gateway.tools["add_tags"].calls == []
+
+
+def test_does_not_update_a_fuzzy_document_search_match() -> None:
+    gateway = _gateway()
+    gateway.tools["search_documents"].response = {
+        "searchResults": [
+            {
+                "entity": {
+                    "urn": "urn:li:document:unrelated",
+                    "info": {"title": "A different impact analysis"},
+                }
+            }
+        ],
+        "total": 1,
+    }
+
+    gateway.write_back(_report())
+
+    assert "urn" not in gateway.tools["save_document"].calls[0]
+
+
+def test_updates_only_the_exact_analysis_document() -> None:
+    gateway = _gateway()
+    gateway.tools["search_documents"].response = {
+        "searchResults": [
+            {
+                "entity": {
+                    "urn": "urn:li:document:existing",
+                    "info": {"title": "Cutset impact abc123"},
+                }
+            }
+        ],
+        "total": 1,
+    }
+
+    result = gateway.write_back(_report())
+
+    assert result.updated_existing_document is True
+    assert gateway.tools["save_document"].calls[0]["urn"] == "urn:li:document:existing"

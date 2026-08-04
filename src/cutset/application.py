@@ -5,7 +5,7 @@ from typing import Protocol
 
 from cutset.change_detection import parse_column_rename
 from cutset.domain import ColumnRename, ImpactEvidence
-from cutset.git_adapter import GitDiffRequest, read_git_diff
+from cutset.git_adapter import GitDiffRequest, read_git_diff, resolve_git_revision
 from cutset.policy import analysis_key, decide
 from cutset.remediation import (
     GeneratedRemediation,
@@ -58,6 +58,8 @@ def analyze(
     gateway: EvidenceGateway,
     model: Callable[[str], str] | None = None,
 ) -> ImpactReport:
+    base_sha = resolve_git_revision(request.repo, request.base)
+    head_sha = resolve_git_revision(request.repo, request.head)
     diff = read_git_diff(GitDiffRequest(request.repo, request.base, request.head))
     change = parse_column_rename(diff)
     evidence = gateway.collect_evidence(change)
@@ -70,10 +72,10 @@ def analyze(
             else _deterministic_remediation(evidence)
         )
     return ImpactReport(
-        analysis_key=analysis_key(request.repository_id, request.base, request.head),
+        analysis_key=analysis_key(request.repository_id, base_sha, head_sha),
         repository=request.repository_id,
-        base=request.base,
-        head=request.head,
+        base=base_sha,
+        head=head_sha,
         change=change,
         evidence=evidence,
         decision=decision,

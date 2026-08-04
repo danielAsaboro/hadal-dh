@@ -52,16 +52,16 @@ def review(
 
     write_reports(report, output)
     typer.echo(render_markdown(report))
+    if not report.evidence.complete:
+        raise typer.Exit(3)
+    if report.remediation is not None and not report.remediation.validation.valid:
+        raise typer.Exit(5)
     if write_back:
         try:
             gateway.write_back(report, tag_name=tag_name)
         except DataHubWriteBackError as error:
             typer.echo(f"Cutset write-back error: {error}", err=True)
             raise typer.Exit(6) from error
-    if not report.evidence.complete:
-        raise typer.Exit(3)
-    if report.remediation is not None and not report.remediation.validation.valid:
-        raise typer.Exit(5)
     if report.decision.blocks_merge:
         raise typer.Exit(4)
 

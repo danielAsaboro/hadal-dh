@@ -51,8 +51,11 @@ def _payload(report: ImpactReport) -> dict[str, Any]:
             "lineage_paths": [
                 {
                     "column": path.column,
+                    "degree": path.degree,
+                    "downstream_columns": list(path.downstream_columns),
                     "source": _asset(path.source),
                     "downstream": _asset(path.downstream),
+                    "nodes": [_asset(node) for node in path.nodes],
                 }
                 for path in report.evidence.lineage_paths
             ],
@@ -90,10 +93,11 @@ def render_markdown(report: ImpactReport) -> str:
         "",
     ]
     if report.evidence.lineage_paths:
-        lines.extend(
-            f"- `{path.downstream.asset_type}` — `{path.downstream.urn}`"
-            for path in report.evidence.lineage_paths
-        )
+        for path in report.evidence.lineage_paths:
+            chain = " → ".join(
+                f"`{node.urn}`" for node in path.nodes
+            ) or f"`{path.downstream.urn}`"
+            lines.append(f"- `{path.downstream.asset_type}` — {chain}")
     else:
         lines.append("- No downstream column consumers returned.")
 

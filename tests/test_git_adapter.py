@@ -3,7 +3,12 @@ from pathlib import Path
 
 import pytest
 
-from cutset.git_adapter import GitContextError, GitDiffRequest, read_git_diff
+from cutset.git_adapter import (
+    GitContextError,
+    GitDiffRequest,
+    read_git_diff,
+    resolve_git_revision,
+)
 
 
 def _git(repo: Path, *args: str) -> str:
@@ -65,3 +70,12 @@ def test_rejects_an_empty_relevant_diff(tmp_path: Path) -> None:
 def test_rejects_a_non_repository(tmp_path: Path) -> None:
     with pytest.raises(GitContextError, match="not a Git repository"):
         read_git_diff(GitDiffRequest(tmp_path, "HEAD~1", "HEAD"))
+
+
+def test_resolves_symbolic_revision_to_commit_sha(tmp_path: Path) -> None:
+    repo = _initialize_repo(tmp_path)
+
+    resolved = resolve_git_revision(repo, "HEAD")
+
+    assert len(resolved) == 40
+    assert resolved == _git(repo, "rev-parse", "HEAD")

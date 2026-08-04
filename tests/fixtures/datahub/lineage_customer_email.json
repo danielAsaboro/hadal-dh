@@ -3,11 +3,11 @@
     "searchResults": [
       {
         "degree": 1,
+        "lineageColumns": ["email_hash"],
         "entity": {
           "urn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.customer_features,PROD)",
           "type": "DATASET",
-          "properties": {"name": "analytics.customer_features"},
-          "lineageColumns": ["email_hash"]
+          "properties": {"name": "analytics.customer_features"}
         }
       },
       {

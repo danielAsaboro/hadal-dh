@@ -21,6 +21,7 @@ Cutset does not grep for table names and call that lineage. It uses the DataHub 
 - search for the changed model instead of guessing a URN;
 - verify the old field against the catalog schema;
 - trace column-level downstream lineage through three hops;
+- retrieve the exact intermediate path for every affected target;
 - distinguish ordinary dataset consumers from ML features and models;
 - save an idempotent impact document and apply an existing risk tag.
 
@@ -67,6 +68,8 @@ Use `--write-back --tag-name cutset-at-risk` only after creating that tag in a t
 - [Design specification](docs/superpowers/specs/2026-08-04-cutset-design.md)
 - [Implementation plan](docs/superpowers/plans/2026-08-04-cutset-vertical-slice.md)
 - [GitHub Actions workflow](.github/workflows/cutset.yml)
+
+The workflow requires a protected GitHub environment named `datahub-review`. It installs the trusted base-commit version of Cutset and treats the PR checkout only as data, so PR-controlled Python never receives DataHub credentials.
 
 ```bash
 pytest -q

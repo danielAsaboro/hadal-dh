@@ -1,15 +1,29 @@
 import json
 from collections.abc import Iterable, Mapping
+from dataclasses import dataclass
 from typing import Any
 
 from datahub.sdk.main_client import DataHubClient
 from datahub_agent_context.langchain_tools import build_langchain_tools
 
 from cutset.domain import AssetRef, ColumnRename, ImpactEvidence, LineagePath
+from cutset.reporting import ImpactReport, render_markdown
 
 
 class DataHubContextError(RuntimeError):
     """Raised when DataHub cannot provide grounded, trustworthy context."""
+
+
+class DataHubWriteBackError(RuntimeError):
+    """Raised when a guarded DataHub mutation does not fully succeed."""
+
+
+@dataclass(frozen=True, slots=True)
+class WriteBackResult:
+    success: bool
+    document_urn: str
+    tagged_urns: tuple[str, ...]
+    updated_existing_document: bool
 
 
 def _as_mapping(value: object, operation: str) -> Mapping[str, Any]:
@@ -202,4 +216,120 @@ class DataHubGateway:
             complete=schema_complete and lineage_complete,
             change=change,
             schema_fields=schema_fields,
+        )
+
+    def _resolve_tag(self, tag_name: str) -> str:
+        response = _as_mapping(
+            self._invoke(
+                "search",
+                {
+                    "query": f"/q {tag_name}",
+                    "filter": "entity_type = tag",
+                    "num_results": 10,
+                    "offset": 0,
+                },
+            ),
+            "search",
+        )
+        raw_results = response.get("searchResults", [])
+        if not isinstance(raw_results, list):
+            raise DataHubWriteBackError("tag search returned invalid results")
+        matches: dict[str, AssetRef] = {}
+        for result in raw_results:
+            if not isinstance(result, Mapping):
+                continue
+            entity = result.get("entity")
+            if not isinstance(entity, Mapping):
+                continue
+            asset = _asset_from_entity(entity)
+            if asset.asset_type == "tag" and asset.name == tag_name:
+                matches[asset.urn] = asset
+        if len(matches) != 1:
+            raise DataHubWriteBackError(
+                f"expected exactly one existing DataHub tag named {tag_name}"
+            )
+        return next(iter(matches))
+
+    def _existing_document_urn(self, analysis_key: str) -> str | None:
+        response = _as_mapping(
+            self._invoke(
+                "search_documents",
+                {
+                    "query": f"/q {analysis_key}",
+                    "num_results": 10,
+                    "offset": 0,
+                },
+            ),
+            "search_documents",
+        )
+        raw_results = response.get("searchResults", [])
+        if not isinstance(raw_results, list):
+            raise DataHubWriteBackError("document search returned invalid results")
+        urns = {
+            entity["urn"]
+            for result in raw_results
+            if isinstance(result, Mapping)
+            and isinstance((entity := result.get("entity")), Mapping)
+            and isinstance(entity.get("urn"), str)
+        }
+        if len(urns) > 1:
+            raise DataHubWriteBackError(
+                f"multiple impact documents matched analysis key {analysis_key}"
+            )
+        return next(iter(urns), None)
+
+    def write_back(
+        self,
+        report: ImpactReport,
+        tag_name: str = "cutset-at-risk",
+    ) -> WriteBackResult:
+        """Persist an impact document and tag only assets read in this analysis."""
+        evidence_urns = [report.evidence.source.urn]
+        evidence_urns.extend(
+            path.downstream.urn for path in report.evidence.lineage_paths
+        )
+        target_urns = list(dict.fromkeys(evidence_urns))
+        if not target_urns or any(not urn.startswith("urn:li:") for urn in target_urns):
+            raise DataHubWriteBackError("write-back target was absent from current evidence")
+
+        try:
+            tag_urn = self._resolve_tag(tag_name)
+            existing_document = self._existing_document_urn(report.analysis_key)
+            save_arguments: dict[str, object] = {
+                "document_type": "Analysis",
+                "title": f"Cutset impact {report.analysis_key}",
+                "content": render_markdown(report),
+                "topics": ["cutset", "schema-change", report.decision.severity.value],
+                "related_assets": target_urns,
+            }
+            if existing_document is not None:
+                save_arguments["urn"] = existing_document
+            save_response = _as_mapping(
+                self._invoke("save_document", save_arguments), "save_document"
+            )
+            if save_response.get("success") is not True:
+                raise DataHubWriteBackError("save_document did not succeed")
+            document_urn = save_response.get("urn")
+            if not isinstance(document_urn, str) or not document_urn.startswith("urn:li:"):
+                raise DataHubWriteBackError("save_document omitted its document URN")
+
+            tag_response = _as_mapping(
+                self._invoke(
+                    "add_tags",
+                    {"tag_urns": [tag_urn], "entity_urns": target_urns},
+                ),
+                "add_tags",
+            )
+            if tag_response.get("success") is not True:
+                raise DataHubWriteBackError("add_tags did not succeed")
+        except DataHubWriteBackError:
+            raise
+        except DataHubContextError as error:
+            raise DataHubWriteBackError("DataHub write-back operation failed") from error
+
+        return WriteBackResult(
+            success=True,
+            document_urn=document_urn,
+            tagged_urns=tuple(target_urns),
+            updated_existing_document=existing_document is not None,
         )

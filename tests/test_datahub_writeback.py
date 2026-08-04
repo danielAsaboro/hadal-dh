@@ -1,0 +1,100 @@
+import pytest
+
+from cutset.datahub_gateway import DataHubGateway, DataHubWriteBackError
+from cutset.domain import (
+    AssetRef,
+    ColumnRename,
+    ImpactDecision,
+    ImpactEvidence,
+    LineagePath,
+    ReasonCode,
+    Severity,
+)
+from cutset.reporting import ImpactReport
+
+
+class _Tool:
+    def __init__(self, name: str, response: object) -> None:
+        self.name = name
+        self.response = response
+        self.calls: list[dict] = []
+
+    def invoke(self, arguments: dict) -> object:
+        self.calls.append(arguments)
+        return self.response
+
+
+def _report() -> ImpactReport:
+    source = AssetRef("urn:li:dataset:customers", "dataset", "customers")
+    model = AssetRef("urn:li:mlModel:churn", "mlModel", "churn")
+    return ImpactReport(
+        analysis_key="abc123",
+        repository="owner/repo",
+        base="base",
+        head="head",
+        change=ColumnRename("customers", "email", "email_address", "customers.yml"),
+        evidence=ImpactEvidence(
+            source=source,
+            lineage_paths=(LineagePath(source, model, "email"),),
+            complete=True,
+        ),
+        decision=ImpactDecision(
+            Severity.CRITICAL, True, ReasonCode.ML_ASSETS_AFFECTED
+        ),
+    )
+
+
+def _gateway(tag_success: bool = True) -> DataHubGateway:
+    return DataHubGateway(
+        client=object(),
+        tools=[
+            _Tool(
+                "search",
+                {
+                    "searchResults": [
+                        {
+                            "entity": {
+                                "urn": "urn:li:tag:cutset-at-risk",
+                                "type": "TAG",
+                                "properties": {"name": "cutset-at-risk"},
+                            }
+                        }
+                    ]
+                },
+            ),
+            _Tool("search_documents", {"searchResults": [], "total": 0}),
+            _Tool(
+                "save_document",
+                {
+                    "success": True,
+                    "urn": "urn:li:document:cutset-impact-abc123",
+                    "message": "saved",
+                },
+            ),
+            _Tool("add_tags", {"success": tag_success, "message": "tagged"}),
+        ],
+    )
+
+
+def test_write_back_uses_only_current_evidence_urns() -> None:
+    gateway = _gateway()
+
+    result = gateway.write_back(_report(), tag_name="cutset-at-risk")
+
+    assert result.success is True
+    assert result.document_urn == "urn:li:document:cutset-impact-abc123"
+    assert gateway.tools["add_tags"].calls[0]["entity_urns"] == [
+        "urn:li:dataset:customers",
+        "urn:li:mlModel:churn",
+    ]
+    assert gateway.tools["save_document"].calls[0]["related_assets"] == [
+        "urn:li:dataset:customers",
+        "urn:li:mlModel:churn",
+    ]
+
+
+def test_partial_write_back_is_a_failure() -> None:
+    gateway = _gateway(tag_success=False)
+
+    with pytest.raises(DataHubWriteBackError, match="add_tags"):
+        gateway.write_back(_report(), tag_name="cutset-at-risk")

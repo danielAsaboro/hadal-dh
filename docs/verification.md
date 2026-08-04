@@ -45,7 +45,7 @@ reports, updated one stable DataHub document, and left the existing
 `cutset-at-risk` tag on every affected asset. See the sanitized
 [live transcript](../examples/sample-run.md).
 
-The current local suite result is `67 passed, 2 skipped`; the two skips are the
+The current local suite result is `72 passed, 2 skipped`; the two skips are the
 explicitly configured live integration tests.
 
 To reproduce the controlled metadata graph before running the checklist:

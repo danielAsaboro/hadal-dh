@@ -38,7 +38,7 @@ DATAHUB_GMS_URL=http://localhost:8080 cutset review \
 - Exit code: `4`
 - Analysis key: `6de99d594317f8d18474`
 - Remediation validation: `VALID`
-- Top-ranked impact: `churn_prediction_v2` (score `145`)
+- Top-ranked impact: `churn_prediction_v2` (score `105`)
 - Usage grounding: `urn:li:query:cutset-customer-feature-extraction`
 
 The report preserved both the exact field path
@@ -51,7 +51,7 @@ DataHub saved one related impact document and applied the existing
 `cutset-at-risk` tag to the affected datasets and model.
 
 The identical command was then run a second time. Both JSON reports had SHA-256
-`add523a1a43d43d87855aa44d20305bba5d44c5383bae1f32f8022f6836feb71`, and
+`5a1e00354682963a15e3301d280f36395459d88cee40885ae96874b727b93158`, and
 both Markdown reports had SHA-256
-`c402c48d62ba2c658e7f615c9be3052623aa9433c1d5f863db59f9d5a3af6f60`.
+`f6f7de2deadbf273917c71f963e802ea1598bbcff542c0222e470164f7597a38`.
 The second write updated the same DataHub document rather than creating another.

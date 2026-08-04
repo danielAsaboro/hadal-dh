@@ -214,10 +214,9 @@
       },
       "factors": [
         "ml_asset",
-        "column_mapping",
         "missing_owner"
       ],
-      "score": 145
+      "score": 105
     },
     {
       "asset": {

@@ -15,7 +15,7 @@
 
 ## Ranked impact
 
-- `churn_prediction_v2` — score `145` — ml_asset, column_mapping, missing_owner
+- `churn_prediction_v2` — score `105` — ml_asset, missing_owner
 - `Customer Features` — score `45` — column_mapping, missing_owner
 
 ## DataHub context

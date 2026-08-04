@@ -30,7 +30,7 @@ normalized immutable evidence
 - Git revisions are validated before `git diff` runs.
 - Dataset and tag URNs are retained from DataHub search results; Cutset never constructs them.
 - Pagination and token truncation make evidence incomplete and therefore blocking.
-- Query SQL literals are replaced with placeholders before entering evidence or reports.
+- Query SQL comments are removed and literals are replaced with placeholders before entering evidence or reports.
 - Merge safety is pure policy code. A model may draft remediation, but cannot choose the verdict.
 - Impact ranking is deterministic and advisory; it never changes the merge verdict.
 - Generated SQL is limited to one compatibility alias over a relation verified from a DataHub query or dataset URN. Cutset emits it for review and never applies it.

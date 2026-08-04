@@ -178,6 +178,11 @@ class DataHubGateway:
                 f"verified DataHub schema does not contain column {change.old_name}"
             )
         schema_complete = schema.get("remainingCount", 0) == 0
+        schema_fields = tuple(
+            str(field["fieldPath"])
+            for field in raw_fields
+            if isinstance(field, Mapping) and isinstance(field.get("fieldPath"), str)
+        )
 
         lineage = self._invoke(
             "get_lineage",
@@ -195,4 +200,6 @@ class DataHubGateway:
             source=source,
             lineage_paths=paths,
             complete=schema_complete and lineage_complete,
+            change=change,
+            schema_fields=schema_fields,
         )

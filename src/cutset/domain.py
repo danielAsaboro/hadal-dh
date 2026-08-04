@@ -29,6 +29,8 @@ class ImpactEvidence:
     source: AssetRef
     lineage_paths: tuple[LineagePath, ...]
     complete: bool
+    change: ColumnRename | None = None
+    schema_fields: tuple[str, ...] = ()
 
 
 class Severity(str, Enum):

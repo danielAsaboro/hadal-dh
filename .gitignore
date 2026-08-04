@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Secrets — never commit your real .env
+.env
+*.env
+!.env.example
+
+# Local sample data — NOT pushed. Get it from the static-assets repo
+# (linked in the Devpost resources tab).
+sample-data/
+
+# Local fallback copies (e.g. the extended goal.py) — not part of the repo
+_fallback/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/

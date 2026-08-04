@@ -1,0 +1,22 @@
+# DataHub Agent Starter — dependencies
+#
+# Requires Python 3.9+.
+# Pins below are conservative floors. After your first successful run, freeze
+# exact versions for reproducibility:  pip freeze > requirements.lock.txt
+
+# DataHub capabilities exposed as LangChain tools.
+# The [langchain] extra pulls in acryl-datahub + LangChain 1.x + langchain-core.
+datahub-agent-context[langchain]
+
+# Agent orchestration — provides langgraph.prebuilt.create_react_agent.
+# Not included by the Kit, so add it explicitly.
+langgraph
+
+# LLM provider for the default model (anthropic:claude-sonnet-5).
+# Swap for your provider and set the matching API key in .env:
+#   langchain-openai        -> openai:gpt-...
+#   langchain-google-genai  -> google_genai:gemini-...
+langchain-anthropic
+
+# Loads .env
+python-dotenv

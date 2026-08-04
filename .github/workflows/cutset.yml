@@ -31,6 +31,15 @@ jobs:
           path: candidate
           persist-credentials: false
 
+      - name: Fetch target base into candidate repository
+        env:
+          BASE_REPOSITORY: ${{ github.repository }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git -C candidate fetch --no-tags \
+            "https://github.com/${BASE_REPOSITORY}.git" \
+            "${BASE_SHA}:refs/cutset/base"
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"

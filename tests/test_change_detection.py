@@ -56,3 +56,22 @@ diff --git a/models/schema.yml b/models/schema.yml
 """
 
     assert parse_column_rename(diff).model_name == "customers"
+
+
+def test_rejects_a_source_column_rename() -> None:
+    diff = """\
+diff --git a/models/sources.yml b/models/sources.yml
+--- a/models/sources.yml
++++ b/models/sources.yml
+@@ -1,7 +1,7 @@
+ sources:
+   - name: raw
+     tables:
+       - name: customers
+         columns:
+-          - name: email
++          - name: email_address
+"""
+
+    with pytest.raises(UnsupportedChangeError, match="dbt model"):
+        parse_column_rename(diff)

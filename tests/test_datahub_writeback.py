@@ -11,6 +11,7 @@ from cutset.domain import (
     Severity,
 )
 from cutset.reporting import ImpactReport
+from cutset.remediation import GeneratedRemediation, RemediationDraft, ValidationResult
 
 
 class _Tool:
@@ -116,8 +117,11 @@ def test_write_back_uses_only_current_evidence_urns() -> None:
 def test_partial_write_back_is_a_failure() -> None:
     gateway = _gateway(tag_success=False)
 
-    with pytest.raises(DataHubWriteBackError, match="add_tags"):
+    with pytest.raises(DataHubWriteBackError, match="add_tags") as captured:
         gateway.write_back(_report(), tag_name="cutset-at-risk")
+
+    assert captured.value.document_saved is True
+    assert captured.value.tags_applied is False
 
 
 def test_non_blocking_report_is_documented_without_risk_tag() -> None:
@@ -167,3 +171,62 @@ def test_updates_only_the_exact_analysis_document() -> None:
 
     assert result.updated_existing_document is True
     assert gateway.tools["save_document"].calls[0]["urn"] == "urn:li:document:existing"
+
+
+def test_gateway_rejects_incomplete_evidence_before_any_mutation() -> None:
+    gateway = _gateway()
+    report = _report()
+    incomplete = ImpactReport(
+        analysis_key=report.analysis_key,
+        repository=report.repository,
+        base=report.base,
+        head=report.head,
+        change=report.change,
+        evidence=ImpactEvidence(
+            source=report.evidence.source,
+            lineage_paths=report.evidence.lineage_paths,
+            complete=False,
+        ),
+        decision=ImpactDecision(
+            Severity.BLOCKED, True, ReasonCode.CONTEXT_INCOMPLETE
+        ),
+    )
+
+    with pytest.raises(DataHubWriteBackError, match="complete evidence"):
+        gateway.write_back(incomplete)
+
+    assert gateway.tools["save_document"].calls == []
+    assert gateway.tools["add_tags"].calls == []
+
+
+def test_gateway_rejects_invalid_remediation_before_any_mutation() -> None:
+    gateway = _gateway()
+    report = _report()
+    invalid = ImpactReport(
+        analysis_key=report.analysis_key,
+        repository=report.repository,
+        base=report.base,
+        head=report.head,
+        change=report.change,
+        evidence=report.evidence,
+        decision=report.decision,
+        remediation=GeneratedRemediation(
+            RemediationDraft("bad", "bad", "bad"),
+            ValidationResult(False, ("invalid",)),
+        ),
+    )
+
+    with pytest.raises(DataHubWriteBackError, match="valid remediation"):
+        gateway.write_back(invalid)
+
+    assert gateway.tools["save_document"].calls == []
+
+
+def test_missing_risk_tag_is_detected_before_document_save() -> None:
+    gateway = _gateway()
+    gateway.tools["search"].response = {"searchResults": [], "total": 0}
+
+    with pytest.raises(DataHubWriteBackError, match="existing DataHub tag"):
+        gateway.write_back(_report())
+
+    assert gateway.tools["save_document"].calls == []

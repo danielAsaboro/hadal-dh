@@ -1,12 +1,18 @@
 import json
+import warnings
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any
+
+from datahub.errors import ExperimentalWarning
+
+warnings.filterwarnings("ignore", category=ExperimentalWarning)
 
 from datahub.sdk.main_client import DataHubClient
 from datahub_agent_context.langchain_tools import build_langchain_tools
 
 from cutset.domain import AssetRef, ColumnRename, ImpactEvidence, LineagePath
+from cutset.policy import decide
 from cutset.reporting import ImpactReport, render_markdown
 
 
@@ -16,6 +22,19 @@ class DataHubContextError(RuntimeError):
 
 class DataHubWriteBackError(RuntimeError):
     """Raised when a guarded DataHub mutation does not fully succeed."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        document_saved: bool = False,
+        document_urn: str | None = None,
+        tags_applied: bool = False,
+    ) -> None:
+        super().__init__(message)
+        self.document_saved = document_saved
+        self.document_urn = document_urn
+        self.tags_applied = tags_applied
 
 
 @dataclass(frozen=True, slots=True)
@@ -385,6 +404,18 @@ class DataHubGateway:
         tag_name: str = "cutset-at-risk",
     ) -> WriteBackResult:
         """Persist an impact document and tag only assets read in this analysis."""
+        if not report.evidence.complete:
+            raise DataHubWriteBackError("write-back requires complete evidence")
+        if report.decision != decide(report.evidence):
+            raise DataHubWriteBackError(
+                "write-back decision does not match deterministic policy"
+            )
+        if (
+            report.remediation is not None
+            and not report.remediation.validation.valid
+        ):
+            raise DataHubWriteBackError("write-back requires valid remediation")
+
         evidence_urns = [report.evidence.source.urn]
         evidence_urns.extend(
             path.downstream.urn for path in report.evidence.lineage_paths
@@ -393,7 +424,15 @@ class DataHubGateway:
         if not target_urns or any(not urn.startswith("urn:li:") for urn in target_urns):
             raise DataHubWriteBackError("write-back target was absent from current evidence")
 
+        document_urn: str | None = None
+        document_saved = False
+        tags_applied = False
         try:
+            tag_urn = (
+                self._resolve_tag(tag_name)
+                if report.decision.blocks_merge
+                else None
+            )
             existing_document = self._existing_document_urn(report.analysis_key)
             save_arguments: dict[str, object] = {
                 "document_type": "Analysis",
@@ -412,10 +451,12 @@ class DataHubGateway:
             document_urn = save_response.get("urn")
             if not isinstance(document_urn, str) or not document_urn.startswith("urn:li:"):
                 raise DataHubWriteBackError("save_document omitted its document URN")
+            document_saved = True
 
             tagged_urns: tuple[str, ...] = ()
             if report.decision.blocks_merge:
-                tag_urn = self._resolve_tag(tag_name)
+                if tag_urn is None:
+                    raise DataHubWriteBackError("blocking report omitted its risk tag")
                 tag_response = _as_mapping(
                     self._invoke(
                         "add_tags",
@@ -424,12 +465,22 @@ class DataHubGateway:
                     "add_tags",
                 )
                 if tag_response.get("success") is not True:
-                    raise DataHubWriteBackError("add_tags did not succeed")
+                    raise DataHubWriteBackError(
+                        "add_tags did not succeed",
+                        document_saved=True,
+                        document_urn=document_urn,
+                    )
                 tagged_urns = tuple(target_urns)
+                tags_applied = True
         except DataHubWriteBackError:
             raise
         except DataHubContextError as error:
-            raise DataHubWriteBackError("DataHub write-back operation failed") from error
+            raise DataHubWriteBackError(
+                "DataHub write-back operation failed",
+                document_saved=document_saved,
+                document_urn=document_urn,
+                tags_applied=tags_applied,
+            ) from error
 
         return WriteBackResult(
             success=True,

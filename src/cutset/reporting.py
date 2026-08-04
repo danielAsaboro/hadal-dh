@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from cutset.domain import ColumnRename, ImpactDecision, ImpactEvidence
+from cutset.domain import ColumnRename, ImpactDecision, ImpactEvidence, RankedImpact
 from cutset.remediation import GeneratedRemediation
 
 
@@ -17,6 +17,7 @@ class ImpactReport:
     evidence: ImpactEvidence
     decision: ImpactDecision
     remediation: GeneratedRemediation | None = None
+    ranked_impacts: tuple[RankedImpact, ...] = ()
 
 
 def _asset(asset: object) -> dict[str, str]:
@@ -44,6 +45,14 @@ def _payload(report: ImpactReport) -> dict[str, Any]:
             "blocks_merge": report.decision.blocks_merge,
             "reason": report.decision.reason.value,
         },
+        "ranked_impacts": [
+            {
+                "asset": _asset(item.asset),
+                "score": item.score,
+                "factors": list(item.factors),
+            }
+            for item in report.ranked_impacts
+        ],
         "evidence": {
             "complete": report.evidence.complete,
             "source": _asset(report.evidence.source),
@@ -100,6 +109,14 @@ def render_markdown(report: ImpactReport) -> str:
             lines.append(f"- `{path.downstream.asset_type}` — {chain}")
     else:
         lines.append("- No downstream column consumers returned.")
+
+    if report.ranked_impacts:
+        lines.extend(["", "## Ranked impact", ""])
+        for item in report.ranked_impacts:
+            factors = ", ".join(item.factors)
+            lines.append(
+                f"- `{item.asset.name}` — score `{item.score}` — {factors}"
+            )
 
     if report.remediation is not None:
         validity = "VALID" if report.remediation.validation.valid else "INVALID"

@@ -95,3 +95,10 @@ class ImpactDecision:
     severity: Severity
     blocks_merge: bool
     reason: ReasonCode
+
+
+@dataclass(frozen=True, slots=True)
+class RankedImpact:
+    asset: AssetRef
+    score: int
+    factors: tuple[str, ...]

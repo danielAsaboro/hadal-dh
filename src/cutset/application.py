@@ -7,6 +7,7 @@ from cutset.change_detection import parse_column_rename
 from cutset.domain import ColumnRename, ImpactEvidence
 from cutset.git_adapter import GitDiffRequest, read_git_diff, resolve_git_revision
 from cutset.policy import analysis_key, decide
+from cutset.ranking import rank_impacts
 from cutset.remediation import (
     GeneratedRemediation,
     RemediationDraft,
@@ -80,4 +81,5 @@ def analyze(
         evidence=evidence,
         decision=decision,
         remediation=remediation,
+        ranked_impacts=rank_impacts(evidence),
     )

@@ -1,4 +1,5 @@
 import json
+from dataclasses import replace
 
 from cutset.domain import (
     AssetRef,
@@ -7,6 +8,7 @@ from cutset.domain import (
     ImpactEvidence,
     LineagePath,
     ReasonCode,
+    RankedImpact,
     Severity,
 )
 from cutset.policy import analysis_key
@@ -49,3 +51,32 @@ def test_json_is_canonical_and_uses_stable_enum_values() -> None:
     payload = json.loads(rendered)
     assert payload["decision"]["severity"] == "critical"
     assert payload["decision"]["reason"] == "ml_assets_affected"
+
+
+def test_reports_ranked_impact_scores_and_factors() -> None:
+    report = _critical_report()
+    downstream = report.evidence.lineage_paths[0].downstream
+    report = replace(
+        report,
+        ranked_impacts=(
+            RankedImpact(downstream, 145, ("ml_asset", "column_mapping", "missing_owner")),
+        ),
+    )
+
+    markdown = render_markdown(report)
+    payload = json.loads(render_json(report))
+
+    assert "## Ranked impact" in markdown
+    assert "score `145`" in markdown
+    assert "ml_asset, column_mapping, missing_owner" in markdown
+    assert payload["ranked_impacts"] == [
+        {
+            "asset": {
+                "asset_type": "mlModel",
+                "name": "churn",
+                "urn": "urn:li:mlModel:churn",
+            },
+            "factors": ["ml_asset", "column_mapping", "missing_owner"],
+            "score": 145,
+        }
+    ]

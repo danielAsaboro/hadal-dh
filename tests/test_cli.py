@@ -94,6 +94,7 @@ def test_cli_uses_real_git_and_writes_reports(tmp_path: Path, monkeypatch) -> No
     assert result.exit_code == 4
     assert (output / "impact-report.json").exists()
     assert "ml_assets_affected" in (output / "impact-report.md").read_text()
+    assert "## Ranked impact" in (output / "impact-report.md").read_text()
 
 
 def test_cli_preserves_reports_when_write_back_fails(tmp_path: Path, monkeypatch) -> None:

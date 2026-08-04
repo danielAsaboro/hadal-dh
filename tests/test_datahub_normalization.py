@@ -304,6 +304,23 @@ def test_malformed_query_context_marks_evidence_incomplete() -> None:
     assert evidence.complete is False
 
 
+def test_multiple_mapped_downstream_columns_fail_closed() -> None:
+    gateway = _gateway()
+    response = gateway.tools["get_lineage"].response
+    response["downstreams"]["searchResults"][0]["lineageColumns"] = [
+        "email_hash",
+        "email_domain",
+    ]
+
+    evidence = gateway.collect_evidence(
+        ColumnRename("customers", "email", "email_address", "models/customers.yml")
+    )
+
+    assert evidence.complete is False
+    assert evidence.asset_contexts
+    assert all(not context.complete for context in evidence.asset_contexts)
+
+
 def test_resolves_dataset_by_urn_name_when_search_returns_display_name() -> None:
     gateway = _gateway()
     gateway.tools["search"].response["searchResults"][0]["entity"]["properties"] = {

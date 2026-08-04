@@ -102,6 +102,11 @@ def normalize_entity_context(
         statuses: set[str] = set()
         for signal in raw_health:
             health = _mapping(signal, "health signal")
+            signal_type = health.get("type")
+            if not isinstance(signal_type, str) or not signal_type:
+                raise ContextNormalizationError("health signal omitted its type")
+            if signal_type.upper() != "INCIDENTS":
+                continue
             status = health.get("status")
             if not isinstance(status, str) or not status:
                 raise ContextNormalizationError("health signal omitted its status")
@@ -127,7 +132,7 @@ def _redact_sql(statement: str) -> str:
         raise ContextNormalizationError("query statement is not valid SQL") from error
     redacted = parsed.transform(
         lambda node: exp.Placeholder() if isinstance(node, exp.Literal) else node
-    ).sql()
+    ).sql(comments=False)
     return redacted[:2000]
 
 
@@ -234,14 +239,24 @@ def normalize_assertions(
     total, raw_sample = _assertion_page(sample_response, "assertion sample")
     failing, _ = _assertion_page(failing_response, "failing assertions")
     errors, _ = _assertion_page(error_response, "error assertions")
+    if failing > total or errors > total or failing + errors > total:
+        raise ContextNormalizationError(
+            "filtered assertion totals exceed the verified total"
+        )
     sample: list[AssertionSignal] = []
     for raw_assertion in raw_sample:
         assertion = _mapping(raw_assertion, "assertion")
         urn = _urn(assertion.get("urn"), "assertion")
         assertion_type = assertion.get("type")
-        status = assertion.get("latestResultType")
+        raw_status = assertion.get("latestResultType")
+        status = "UNKNOWN" if raw_status is None else raw_status
         column = assertion.get("column")
-        if not isinstance(assertion_type, str) or not isinstance(status, str):
+        if (
+            not isinstance(assertion_type, str)
+            or not assertion_type
+            or not isinstance(status, str)
+            or not status
+        ):
             raise ContextNormalizationError("assertion omitted its type or status")
         if column is not None and not isinstance(column, str):
             raise ContextNormalizationError("assertion column must be a string")

@@ -19,7 +19,7 @@ def rank_impacts(evidence: ImpactEvidence) -> tuple[RankedImpact, ...]:
         if asset.asset_type in _ML_TYPES:
             score += 100
             factors.append("ml_asset")
-        if path.column or path.downstream_columns:
+        if path.downstream_columns:
             score += 40
             factors.append("column_mapping")
 

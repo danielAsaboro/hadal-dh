@@ -444,6 +444,10 @@ class DataHubGateway:
                     enriched.append(context)
                     continue
                 columns = sorted(relevant_columns.get(context.asset.urn, ()))
+                if len(columns) > 1:
+                    raise ContextNormalizationError(
+                        "multiple mapped columns cannot be represented completely"
+                    )
                 column = columns[0] if columns else None
                 query_arguments: dict[str, object] = {
                     "urn": context.asset.urn,

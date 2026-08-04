@@ -91,3 +91,18 @@ def test_source_asset_is_not_ranked_as_downstream_impact() -> None:
     )
 
     assert rank_impacts(evidence) == ()
+
+
+def test_bridged_ml_asset_without_target_column_has_no_mapping_bonus() -> None:
+    model = AssetRef("urn:li:mlModel:churn", "mlModel", "churn")
+    evidence = ImpactEvidence(
+        source=SOURCE,
+        lineage_paths=(LineagePath(SOURCE, model, "email", degree="3"),),
+        complete=True,
+        asset_contexts=(AssetContext(asset=model),),
+    )
+
+    ranked = rank_impacts(evidence)
+
+    assert ranked[0].score == 105
+    assert ranked[0].factors == ("ml_asset", "missing_owner")

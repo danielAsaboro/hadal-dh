@@ -77,6 +77,8 @@ def _payload(report: ImpactReport) -> dict[str, Any]:
             "explanation": report.remediation.draft.explanation,
             "valid": report.remediation.validation.valid,
             "errors": list(report.remediation.validation.errors),
+            "grounding_mode": report.remediation.draft.grounding_mode,
+            "supporting_query_urn": report.remediation.draft.supporting_query_urn,
         }
     return payload
 
@@ -124,6 +126,9 @@ def render_markdown(report: ImpactReport) -> str:
             [
                 "",
                 f"## Suggested compatibility patch: {validity}",
+                "",
+                f"- Grounding: `{report.remediation.draft.grounding_mode}`",
+                f"- Supporting query: `{report.remediation.draft.supporting_query_urn or 'none'}`",
                 "",
                 "```sql",
                 report.remediation.draft.sql,

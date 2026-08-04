@@ -12,6 +12,7 @@ from cutset.domain import (
     Severity,
 )
 from cutset.policy import analysis_key
+from cutset.remediation import GeneratedRemediation, RemediationDraft, ValidationResult
 from cutset.reporting import ImpactReport, render_json, render_markdown
 
 
@@ -80,3 +81,27 @@ def test_reports_ranked_impact_scores_and_factors() -> None:
             "score": 145,
         }
     ]
+
+
+def test_reports_remediation_grounding_and_query_citation() -> None:
+    report = replace(
+        _critical_report(),
+        remediation=GeneratedRemediation(
+            RemediationDraft(
+                "select email as email_address from analytics.customers",
+                "version: 2\nmodels: []\n",
+                "observed usage",
+                grounding_mode="query_grounded",
+                supporting_query_urn="urn:li:query:q1",
+            ),
+            ValidationResult(True, ()),
+        ),
+    )
+
+    markdown = render_markdown(report)
+    payload = json.loads(render_json(report))
+
+    assert "Grounding: `query_grounded`" in markdown
+    assert "Supporting query: `urn:li:query:q1`" in markdown
+    assert payload["remediation"]["grounding_mode"] == "query_grounded"
+    assert payload["remediation"]["supporting_query_urn"] == "urn:li:query:q1"

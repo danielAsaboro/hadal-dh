@@ -12,6 +12,7 @@ from cutset.remediation import (
     GeneratedRemediation,
     RemediationDraft,
     generate_remediation,
+    select_remediation_grounding,
     validate_remediation,
 )
 from cutset.reporting import ImpactReport
@@ -35,10 +36,11 @@ def _deterministic_remediation(evidence: ImpactEvidence) -> GeneratedRemediation
     if evidence.change is None:
         raise ValueError("verified change is required for remediation")
     change = evidence.change
+    grounding = select_remediation_grounding(evidence)
     draft = RemediationDraft(
         sql=(
             f"select {change.old_name} as {change.new_name} "
-            "from upstream"
+            f"from {grounding.relation}"
         ),
         schema_yaml=(
             "version: 2\n"
@@ -49,7 +51,13 @@ def _deterministic_remediation(evidence: ImpactEvidence) -> GeneratedRemediation
             "        tests:\n"
             "          - not_null\n"
         ),
-        explanation="Compatibility alias grounded in the verified DataHub schema.",
+        explanation=(
+            "Compatibility alias grounded in observed DataHub SQL usage."
+            if grounding.mode == "query_grounded"
+            else "Compatibility alias grounded in the verified DataHub schema."
+        ),
+        grounding_mode=grounding.mode,
+        supporting_query_urn=grounding.query_urn,
     )
     return GeneratedRemediation(draft, validate_remediation(draft, evidence))
 

@@ -16,6 +16,7 @@ dependencies = [
   "langgraph",
   "langchain-anthropic",
   "python-dotenv",
+  "sqlglot>=26,<28",
 ]
 
 [project.optional-dependencies]

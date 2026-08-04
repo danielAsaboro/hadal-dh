@@ -10,7 +10,7 @@ from datahub.metadata.schema_classes import (
     QuerySubjectsClass,
     QuerySubjectClass,
 )
-from datahub.metadata.urns import QueryUrn
+from datahub.metadata.urns import QueryUrn, SchemaFieldUrn
 from datahub.sdk.dataflow import DataFlow
 from datahub.sdk.datajob import DataJob
 from datahub.sdk.dataset import Dataset
@@ -30,7 +30,7 @@ class DemoQuery(Entity):
     def get_urn_type(cls) -> Type[QueryUrn]:
         return QueryUrn
 
-    def __init__(self, *, id: str, statement: str, subject: str) -> None:
+    def __init__(self, *, id: str, statement: str, subjects: Sequence[str]) -> None:
         super().__init__(QueryUrn(id=id))
         audit = AuditStampClass(time=0, actor="urn:li:corpuser:cutset-demo")
         self._set_aspect(
@@ -43,7 +43,9 @@ class DemoQuery(Entity):
             )
         )
         self._set_aspect(
-            QuerySubjectsClass(subjects=[QuerySubjectClass(entity=subject)])
+            QuerySubjectsClass(
+                subjects=[QuerySubjectClass(entity=subject) for subject in subjects]
+            )
         )
 
 
@@ -122,7 +124,10 @@ def build_demo_entities() -> Sequence[Entity]:
             "select customer_id, email from analytics.customers "
             "where region = 'NG'"
         ),
-        subject=str(customers.urn),
+        subjects=(
+            str(customers.urn),
+            str(SchemaFieldUrn(customers.urn, "email")),
+        ),
     )
     return (
         risk_tag,

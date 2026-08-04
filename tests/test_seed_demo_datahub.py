@@ -60,4 +60,7 @@ def test_demo_entities_encode_dataset_column_and_model_training_lineage() -> Non
     assert "region = 'NG'" in query_properties.statement.value
     query_subjects = query._get_aspect(QuerySubjectsClass)
     assert query_subjects is not None
-    assert [subject.entity for subject in query_subjects.subjects] == [str(source.urn)]
+    assert [subject.entity for subject in query_subjects.subjects] == [
+        str(source.urn),
+        "urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.customers,PROD),email)",
+    ]

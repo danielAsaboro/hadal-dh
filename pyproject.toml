@@ -32,4 +32,6 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-
+markers = [
+  "integration: requires a live DataHub instance and configured dataset",
+]

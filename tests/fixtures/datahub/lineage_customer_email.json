@@ -1,0 +1,39 @@
+{
+  "downstreams": {
+    "searchResults": [
+      {
+        "degree": 1,
+        "entity": {
+          "urn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.customer_features,PROD)",
+          "type": "DATASET",
+          "properties": {"name": "analytics.customer_features"},
+          "lineageColumns": ["email_hash"]
+        }
+      },
+      {
+        "degree": 2,
+        "entity": {
+          "urn": "urn:li:mlFeature:customer_email_domain",
+          "type": "MLFEATURE",
+          "properties": {"name": "customer_email_domain"}
+        }
+      },
+      {
+        "degree": 3,
+        "entity": {
+          "urn": "urn:li:mlModel:churn_prediction_v2",
+          "type": "MLMODEL",
+          "properties": {"name": "churn_prediction_v2"}
+        }
+      }
+    ],
+    "total": 3,
+    "returned": 3,
+    "offset": 0,
+    "hasMore": false
+  },
+  "metadata": {
+    "queryType": "column-level-lineage",
+    "groupedBy": "dataset"
+  }
+}

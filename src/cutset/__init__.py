@@ -3,4 +3,3 @@
 from cutset.domain import ColumnRename
 
 __all__ = ["ColumnRename"]
-

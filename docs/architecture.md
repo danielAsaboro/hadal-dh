@@ -43,4 +43,3 @@ normalized immutable evidence
 - `search_documents` finds an existing analysis by stable key.
 - `save_document` creates or updates the impact analysis.
 - `add_tags` marks the affected assets with an existing catalog tag.
-

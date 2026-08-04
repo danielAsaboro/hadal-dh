@@ -38,4 +38,3 @@ Verify all four artifacts before recording the demo:
 4. A second identical run updates the same document instead of creating a duplicate.
 
 The committed files under `examples/` are sanitized fixture-derived outputs until this checklist is run against the submission DataHub deployment. Private unsanitized transcripts belong in the parent workspace's `submission/evidence/`, never in this public repository.
-

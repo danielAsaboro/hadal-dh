@@ -21,4 +21,3 @@ select email as email_address from upstream
 ```
 
 CUTSET ANALYSIS KEY: `1d4d82709b61a9577412`
-

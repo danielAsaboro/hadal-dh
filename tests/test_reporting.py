@@ -49,4 +49,3 @@ def test_json_is_canonical_and_uses_stable_enum_values() -> None:
     payload = json.loads(rendered)
     assert payload["decision"]["severity"] == "critical"
     assert payload["decision"]["reason"] == "ml_assets_affected"
-

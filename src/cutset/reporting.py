@@ -130,4 +130,3 @@ def write_reports(report: ImpactReport, output: Path) -> tuple[Path, Path]:
     json_path.write_text(render_json(report))
     markdown_path.write_text(render_markdown(report))
     return json_path, markdown_path
-

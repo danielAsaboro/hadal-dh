@@ -5,4 +5,3 @@ index 375c32a..cd75dd2 100644
 @@ -8 +8 @@ models:
 -      - name: email
 +      - name: email_address
-

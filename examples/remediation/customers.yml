@@ -5,4 +5,3 @@ models:
       - name: email_address
         tests:
           - not_null
-

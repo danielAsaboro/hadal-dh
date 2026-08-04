@@ -32,4 +32,3 @@ def test_collects_evidence_from_live_datahub() -> None:
     )
 
     assert evidence.source.urn == dataset_urn
-

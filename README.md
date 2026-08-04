@@ -12,7 +12,7 @@ A dbt column rename looks harmless in a pull request. The downstream dashboard, 
 4. A downstream `mlModel` produces `critical / ml_assets_affected`, a blocking exit code, JSON/Markdown evidence, and a review-only compatibility alias.
 5. With `--write-back`, Cutset saves the analysis in DataHub and tags only assets returned by the current graph read.
 
-See the [sanitized impact report](examples/impact-report.md) and [architecture](docs/architecture.md).
+See the [verified live run](examples/sample-run.md), [live impact report](examples/impact-report.md), and [architecture](docs/architecture.md).
 
 ## Why DataHub is essential
 

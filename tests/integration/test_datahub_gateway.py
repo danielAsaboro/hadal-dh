@@ -37,6 +37,10 @@ def test_collects_evidence_from_live_datahub() -> None:
     assert evidence.source.urn == dataset_urn
     assert evidence.complete is True
     assert all(path.nodes for path in evidence.lineage_paths)
+    assert any(
+        path.downstream.asset_type == "mlModel"
+        for path in evidence.lineage_paths
+    )
 
 
 @pytest.mark.integration

@@ -76,7 +76,8 @@ def _gateway(tag_success: bool = True) -> DataHubGateway:
                             "entity": {
                                 "urn": "urn:li:tag:cutset-at-risk",
                                 "type": "TAG",
-                                "properties": {"name": "cutset-at-risk"},
+                                "name": "cutset-at-risk",
+                                "properties": {"name": "Cutset: At Risk"},
                             }
                         }
                     ],
@@ -225,6 +226,18 @@ def test_gateway_rejects_invalid_remediation_before_any_mutation() -> None:
 def test_missing_risk_tag_is_detected_before_document_save() -> None:
     gateway = _gateway()
     gateway.tools["search"].response = {"searchResults": [], "total": 0}
+
+    with pytest.raises(DataHubWriteBackError, match="existing DataHub tag"):
+        gateway.write_back(_report())
+
+    assert gateway.tools["save_document"].calls == []
+
+
+def test_malformed_tag_urn_is_a_controlled_preflight_failure() -> None:
+    gateway = _gateway()
+    gateway.tools["search"].response["searchResults"][0]["entity"]["urn"] = (
+        "urn:li:tag:(malformed"
+    )
 
     with pytest.raises(DataHubWriteBackError, match="existing DataHub tag"):
         gateway.write_back(_report())

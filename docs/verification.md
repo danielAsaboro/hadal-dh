@@ -37,4 +37,18 @@ Verify all four artifacts before recording the demo:
 3. DataHub contains a related `Analysis` document with the same Cutset analysis key.
 4. A second identical run updates the same document instead of creating a duplicate.
 
-The committed files under `examples/` are sanitized fixture-derived outputs until this checklist is run against the submission DataHub deployment. Private unsanitized transcripts belong in the parent workspace's `submission/evidence/`, never in this public repository.
+This checklist was completed on 2026-08-04 against the official DataHub v1.6.0
+Docker quickstart. The two runs produced byte-identical JSON and Markdown
+reports, updated one stable DataHub document, and left the existing
+`cutset-at-risk` tag on every affected asset. See the sanitized
+[live transcript](../examples/sample-run.md).
+
+To reproduce the controlled metadata graph before running the checklist:
+
+```bash
+DATAHUB_GMS_URL=http://localhost:8080 \
+  .venv/bin/python scripts/seed_demo_datahub.py
+```
+
+Private environment transcripts belong in the parent workspace's
+`submission/evidence/`, never in this public repository.

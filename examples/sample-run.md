@@ -1,31 +1,51 @@
-# Sample Run
+# Verified live run
 
-> Actual output from `python agent.py` against the DataHub `healthcare` sample dataset
-> (lightly trimmed). The agent reasons fresh each time, so wording varies run to run.
+This transcript was produced on 2026-08-04 against the official DataHub `v1.6.0`
+Docker quickstart on ARM64. The graph was created with
+`scripts/seed_demo_datahub.py`; no Agent Context response was mocked.
+
+## Scenario
+
+A two-commit dbt repository renames `customers.email` to
+`customers.email_address`. DataHub contains this controlled dependency chain:
+
+```text
+analytics.customers.email
+  -> analytics.customer_features.email_hash
+  -> Airflow train-churn job
+  -> MLflow churn_prediction_v2 model
+```
 
 ## Command
 
 ```bash
-python agent.py
+DATAHUB_GMS_URL=http://localhost:8080 cutset review \
+  --repo /path/to/live-demo-repo \
+  --base 988c910 \
+  --head 4f508e2 \
+  --repository-id cutset/live-demo \
+  --output cutset-output \
+  --write-back \
+  --tag-name cutset-at-risk
 ```
 
-## What the agent reported
+## Result
 
-**Dataset flagged:** `urn:li:dataset:(urn:li:dataPlatform:sqlite,healthcare.main.v_billing_from_staging,PROD)`
+- Verdict: `BLOCK`
+- Severity: `critical`
+- Reason: `ml_assets_affected`
+- Context complete: `true`
+- Exit code: `4`
+- Analysis key: `6de99d594317f8d18474`
+- Remediation validation: `VALID`
 
-**Investigation:**
-- Searched all 7 healthcare datasets (`raw_patients` → `staging_patients` → 3 views → `mart_billing` / `mart_demographics`).
-- Every *table* had an owning team (`clinical_team`, `research_team`, `finance_team`) — but the three intermediate *views* had **no owner** assigned.
-- Focused on `v_billing_from_staging`: it duplicates financially-sensitive billing logic (`billing_amount` cast, `length_of_stay_days`) that also lives in `mart_billing`, yet has no owner and sits **outside** the tracked lineage to `mart_billing` (zero downstream consumers) — so it can silently drift out of sync while looking like part of the pipeline.
+The report preserved both the exact field path
+`email -> email_hash` and the exact entity path through the training job to the
+ML model. DataHub saved one related impact document and applied the existing
+`cutset-at-risk` tag to the affected datasets and model.
 
-**Actions taken:**
-1. Updated the description to document the missing owner and the orphaned/duplicate-logic risk.
-2. Added the `needs-review` tag so it surfaces in governance queues.
-
-**Why this one:** among the 7 assets, it combined *no owner* + *duplicated business-critical logic* + *orphaned lineage* — the highest-risk gap in the catalog.
-
-## In the DataHub UI
-
-After the run, `v_billing_from_staging` shows the new **`needs-review`** tag and the updated **description**.
-
-This is the read → act → write-back loop: the agent read context, decided, acted, and wrote the result back — so the catalog is a little more trustworthy than before.
+The identical command was then run a second time. Both JSON reports had SHA-256
+`ed5ecc563fe23946b756d67c92cc1b3d1c4a75549f586c8c9191e3a4fadff137`, and
+both Markdown reports had SHA-256
+`4d40c231f5ea5479965c5fe6f70692940c2424d70765a9f954191f43b17a1f38`.
+The second write updated the same DataHub document rather than creating another.

@@ -173,16 +173,126 @@ def test_collects_grounded_evidence_using_resolved_urn() -> None:
         for path in evidence.lineage_paths
         for node in path.nodes
     )
-    assert gateway.tools["get_lineage"].calls == [
-        {
-            "urn": evidence.source.urn,
-            "column": "email",
-            "upstream": False,
-            "max_hops": 3,
-            "max_results": 50,
-            "offset": 0,
+    assert gateway.tools["get_lineage"].calls[0] == {
+        "urn": evidence.source.urn,
+        "column": "email",
+        "upstream": False,
+        "max_hops": 3,
+        "max_results": 50,
+        "offset": 0,
+    }
+
+
+def test_resolves_dataset_by_urn_name_when_search_returns_display_name() -> None:
+    gateway = _gateway()
+    gateway.tools["search"].response["searchResults"][0]["entity"]["properties"] = {
+        "name": "Customers"
+    }
+
+    evidence = gateway.collect_evidence(
+        ColumnRename("customers", "email", "email_address", "models/customers.yml")
+    )
+
+    assert evidence.source.urn.endswith(",analytics.customers,PROD)")
+
+
+def test_bridges_column_lineage_into_dataset_level_ml_consumers() -> None:
+    gateway = _gateway()
+    feature_urn = (
+        "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.customer_features,PROD)"
+    )
+    model_urn = (
+        "urn:li:mlModel:(urn:li:dataPlatform:mlflow,churn_prediction_v2,PROD)"
+    )
+
+    def lineage_for(arguments: dict) -> dict:
+        if arguments.get("column") == "email":
+            return {
+                "downstreams": {
+                    "searchResults": [
+                        {
+                            "degree": 1,
+                            "lineageColumns": ["email_hash"],
+                            "entity": {
+                                "urn": feature_urn,
+                                "type": "DATASET",
+                                "properties": {"name": "Customer Features"},
+                            },
+                        }
+                    ],
+                    "total": 1,
+                    "returned": 1,
+                    "offset": 0,
+                    "hasMore": False,
+                }
+            }
+        assert arguments["urn"] == feature_urn
+        return {
+            "downstreams": {
+                "searchResults": [
+                    {
+                        "degree": 2,
+                        "entity": {
+                            "urn": model_urn,
+                            "type": "MLMODEL",
+                            "name": "churn_prediction_v2",
+                        },
+                    }
+                ],
+                "total": 1,
+                "returned": 1,
+                "offset": 0,
+                "hasMore": False,
+            }
         }
-    ]
+
+    gateway.tools["get_lineage"].response = lineage_for
+
+    evidence = gateway.collect_evidence(
+        ColumnRename("customers", "email", "email_address", "models/customers.yml")
+    )
+
+    assert evidence.complete is True
+    model_path = next(
+        path for path in evidence.lineage_paths if path.downstream.urn == model_urn
+    )
+    assert model_path.degree == "3"
+    assert gateway.tools["get_lineage"].calls[-1] == {
+        "urn": feature_urn,
+        "upstream": False,
+        "max_hops": 2,
+        "max_results": 50,
+        "offset": 0,
+    }
+
+
+def test_marks_unknown_dataset_degree_incomplete_instead_of_skipping_bridge() -> None:
+    gateway = _gateway()
+    response = gateway.tools["get_lineage"].response
+    response["downstreams"]["searchResults"] = response["downstreams"][
+        "searchResults"
+    ][:1]
+    response["downstreams"]["searchResults"][0]["degree"] = "unknown"
+    response["downstreams"]["total"] = 1
+    response["downstreams"]["returned"] = 1
+
+    evidence = gateway.collect_evidence(
+        ColumnRename("customers", "email", "email_address", "models/customers.yml")
+    )
+
+    assert evidence.complete is False
+
+
+def test_rejects_malformed_dataset_urn_as_controlled_context_error() -> None:
+    gateway = _gateway()
+    gateway.tools["search"].response["searchResults"][0]["entity"]["urn"] = (
+        "urn:li:dataset:malformed"
+    )
+
+    with pytest.raises(DataHubContextError, match="exactly one"):
+        gateway.collect_evidence(
+            ColumnRename("customers", "email", "email_address", "models/customers.yml")
+        )
 
 
 def test_rejects_ambiguous_asset_resolution() -> None:

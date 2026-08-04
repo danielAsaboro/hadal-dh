@@ -1,10 +1,12 @@
 import json
 import warnings
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from datahub.errors import ExperimentalWarning
+from datahub.metadata.urns import DatasetUrn, TagUrn
+from datahub.utilities.urns.error import InvalidUrnError
 
 warnings.filterwarnings("ignore", category=ExperimentalWarning)
 
@@ -237,7 +239,16 @@ class DataHubGateway:
             if not isinstance(entity, Mapping):
                 continue
             candidate = _asset_from_entity(entity)
-            if candidate.name.rsplit(".", 1)[-1] == model_name:
+            logical_name = ""
+            try:
+                logical_name = DatasetUrn.from_string(candidate.urn).name
+            except (InvalidUrnError, ValueError):
+                continue
+            if (
+                candidate.name.rsplit(".", 1)[-1].casefold() == model_name.casefold()
+                or logical_name.rsplit(".", 1)[-1].casefold()
+                == model_name.casefold()
+            ):
                 candidates.append(candidate)
 
         unique = {candidate.urn: candidate for candidate in candidates}
@@ -302,6 +313,65 @@ class DataHubGateway:
             },
         )
         paths, lineage_complete = normalize_lineage(source, change.old_name, lineage)
+        bridged_paths: list[LineagePath] = []
+        bridge_complete = True
+        governed_types = {"mlFeature", "mlModel"}
+        if lineage_complete:
+            seen_targets = {
+                path.downstream.urn
+                for path in paths
+                if path.downstream.asset_type in governed_types
+            }
+            for dataset_path in paths:
+                if dataset_path.downstream.asset_type != "dataset":
+                    continue
+                try:
+                    traversed_hops = int(dataset_path.degree)
+                except ValueError:
+                    bridge_complete = False
+                    continue
+                if traversed_hops < 1:
+                    bridge_complete = False
+                    continue
+                remaining_hops = max_hops - traversed_hops
+                if remaining_hops < 1:
+                    continue
+                downstream_lineage = self._invoke(
+                    "get_lineage",
+                    {
+                        "urn": dataset_path.downstream.urn,
+                        "upstream": False,
+                        "max_hops": remaining_hops,
+                        "max_results": 50,
+                        "offset": 0,
+                    },
+                )
+                downstream_paths, downstream_complete = normalize_lineage(
+                    source, change.old_name, downstream_lineage
+                )
+                bridge_complete = bridge_complete and downstream_complete
+                for downstream_path in downstream_paths:
+                    try:
+                        downstream_hops = int(downstream_path.degree)
+                    except ValueError:
+                        bridge_complete = False
+                        continue
+                    if downstream_hops < 1:
+                        bridge_complete = False
+                        continue
+                    downstream_path = replace(
+                        downstream_path,
+                        degree=str(traversed_hops + downstream_hops),
+                    )
+                    if (
+                        downstream_path.downstream.asset_type in governed_types
+                        and downstream_path.downstream.urn not in seen_targets
+                    ):
+                        seen_targets.add(downstream_path.downstream.urn)
+                        bridged_paths.append(downstream_path)
+
+        paths = (*paths, *bridged_paths)
+        lineage_complete = lineage_complete and bridge_complete
         exact_paths: list[LineagePath] = []
         if lineage_complete:
             for summary in paths:
@@ -356,7 +426,12 @@ class DataHubGateway:
             if not isinstance(entity, Mapping):
                 continue
             asset = _asset_from_entity(entity)
-            if asset.asset_type == "tag" and asset.name == tag_name:
+            resolved_name = ""
+            try:
+                resolved_name = TagUrn.from_string(asset.urn).name
+            except (InvalidUrnError, ValueError):
+                pass
+            if asset.asset_type == "tag" and resolved_name == tag_name:
                 matches[asset.urn] = asset
         if len(matches) != 1:
             raise DataHubWriteBackError(

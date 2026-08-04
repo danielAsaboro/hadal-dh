@@ -1,6 +1,6 @@
 {
-  "analysis_key": "325bc4f10b2f09f08ac1",
-  "base": "fd24a8c4b74453472e3d2cc93703692ab719aceb",
+  "analysis_key": "6de99d594317f8d18474",
+  "base": "988c910f4aa17459fa733dbfdff751ab10dcd99f",
   "change": {
     "model_name": "customers",
     "new_name": "email_address",
@@ -17,45 +17,82 @@
     "lineage_paths": [
       {
         "column": "email",
-        "degree": "3+",
-        "downstream_columns": [],
+        "degree": "1",
         "downstream": {
-          "asset_type": "mlModel",
-          "name": "churn_prediction_v2",
-          "urn": "urn:li:mlModel:churn_prediction_v2"
+          "asset_type": "dataset",
+          "name": "Customer Features",
+          "urn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.customer_features,PROD)"
         },
+        "downstream_columns": [
+          "email_hash"
+        ],
         "nodes": [
           {
-            "asset_type": "dataset",
-            "name": "analytics.customers",
-            "urn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.customers,PROD)"
+            "asset_type": "schemafield",
+            "name": "email",
+            "urn": "urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.customers,PROD),email)"
           },
           {
-            "asset_type": "query",
-            "name": "urn:li:query:build-customer-features",
-            "urn": "urn:li:query:build-customer-features"
-          },
-          {
-            "asset_type": "mlModel",
-            "name": "churn_prediction_v2",
-            "urn": "urn:li:mlModel:churn_prediction_v2"
+            "asset_type": "schemafield",
+            "name": "email_hash",
+            "urn": "urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.customer_features,PROD),email_hash)"
           }
         ],
         "source": {
           "asset_type": "dataset",
-          "name": "analytics.customers",
+          "name": "Customers",
+          "urn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.customers,PROD)"
+        }
+      },
+      {
+        "column": "email",
+        "degree": "3",
+        "downstream": {
+          "asset_type": "mlModel",
+          "name": "churn_prediction_v2",
+          "urn": "urn:li:mlModel:(urn:li:dataPlatform:mlflow,churn_prediction_v2,PROD)"
+        },
+        "downstream_columns": [],
+        "nodes": [
+          {
+            "asset_type": "dataset",
+            "name": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.customers,PROD)",
+            "urn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.customers,PROD)"
+          },
+          {
+            "asset_type": "dataset",
+            "name": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.customer_features,PROD)",
+            "urn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.customer_features,PROD)"
+          },
+          {
+            "asset_type": "datajob",
+            "name": "urn:li:dataJob:(urn:li:dataFlow:(airflow,cutset-demo,PROD),train-churn)",
+            "urn": "urn:li:dataJob:(urn:li:dataFlow:(airflow,cutset-demo,PROD),train-churn)"
+          },
+          {
+            "asset_type": "mlModel",
+            "name": "urn:li:mlModel:(urn:li:dataPlatform:mlflow,churn_prediction_v2,PROD)",
+            "urn": "urn:li:mlModel:(urn:li:dataPlatform:mlflow,churn_prediction_v2,PROD)"
+          }
+        ],
+        "source": {
+          "asset_type": "dataset",
+          "name": "Customers",
           "urn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.customers,PROD)"
         }
       }
     ],
-    "schema_fields": ["customer_id", "email"],
+    "schema_fields": [
+      "customer_id",
+      "email"
+    ],
     "source": {
       "asset_type": "dataset",
-      "name": "analytics.customers",
+      "name": "Customers",
       "urn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.customers,PROD)"
     }
   },
-  "head": "f5469312255d5a17f0d7ca390aa32c81734154ca",
+  "head": "4f508e2cc3eb62606eca106c146b429c74f14681",
   "remediation": {
     "errors": [],
     "explanation": "Compatibility alias grounded in the verified DataHub schema.",
@@ -63,5 +100,5 @@
     "sql": "select email as email_address from upstream",
     "valid": true
   },
-  "repository": "acme/warehouse"
+  "repository": "cutset/live-demo"
 }

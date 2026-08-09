@@ -3,6 +3,7 @@ import {
 } from "../domain/case";
 import {
   caseDocumentTitle,
+  MAX_DATAHUB_DOCUMENT_CHARS,
   parseCaseDocument,
   renderCaseDocument,
   sealCase,
@@ -29,24 +30,28 @@ export class DataHubCaseStore {
   async findCase(caseKey: string): Promise<string | undefined> {
     try {
       const title = caseDocumentTitle(caseKey);
-      const payload = record(await this.tools.callTool("search", {
+      const payload = record(await this.tools.callTool("search_documents", {
         query: `/q "${title}"`,
-        filter: "entity_type = document",
         num_results: 10,
         offset: 0,
       }), "document search response");
-      const results = array(payload.searchResults, "document search results");
       const start = integer(payload.start, "document search start");
-      const count = integer(payload.count, "document search count");
       const total = integer(payload.total, "document search total");
-      if (start !== 0 || count !== results.length || total !== results.length) {
+      const results = payload.searchResults === undefined && total === 0
+        ? []
+        : array(payload.searchResults, "document search results");
+      const count = payload.count === undefined && total === 0
+        ? 0
+        : integer(payload.count, "document search count");
+      if (start !== 0 || results.length > count || total !== results.length) {
         throw new DataHubCaseStoreError("document search results are incomplete");
       }
       const exact = new Set<string>();
       for (const result of results) {
         const entity = record(record(result, "document result").entity, "document entity");
+        const entityUrn = urn(entity.urn, "document");
         const info = record(entity.info, "document info");
-        if (info.title === title) exact.add(urn(entity.urn, "document"));
+        if (info.title === title) exact.add(entityUrn);
       }
       if (exact.size > 1) throw new DataHubCaseStoreError("multiple exact Cutset case documents exist");
       return [...exact][0];
@@ -61,17 +66,20 @@ export class DataHubCaseStore {
       let offset = 0;
       let total = 0;
       do {
-        const payload = record(await this.tools.callTool("search", {
+        const payload = record(await this.tools.callTool("search_documents", {
           query: "/q \"Cutset change case\"",
-          filter: "entity_type = document",
           num_results: 50,
           offset,
         }), "case index response");
-        const results = array(payload.searchResults, "case index results");
         const start = integer(payload.start, "case index start");
-        const count = integer(payload.count, "case index count");
         total = integer(payload.total, "case index total");
-        if (start !== offset || count !== results.length || offset + results.length > total || (results.length === 0 && offset < total)) {
+        const results = payload.searchResults === undefined && total === 0
+          ? []
+          : array(payload.searchResults, "case index results");
+        const count = payload.count === undefined && total === 0
+          ? 0
+          : integer(payload.count, "case index count");
+        if (start !== offset || results.length > count || offset + results.length > total || (results.length === 0 && offset < total)) {
           throw new DataHubCaseStoreError("case index pagination is incomplete");
         }
         for (const result of results) {
@@ -99,22 +107,37 @@ export class DataHubCaseStore {
 
   async loadCase(documentUrn: string): Promise<ChangeCase> {
     try {
-      const response = array(
-        await this.tools.callTool("get_entities", { urns: [documentUrn] }),
-        "document reread response",
-      );
-      if (response.length !== 1) throw new DataHubCaseStoreError("document reread did not return exactly one entity");
-      const entity = record(response[0], "document entity");
-      if (urn(entity.urn, "document") !== documentUrn || entity.error) {
+      const response = record(await this.tools.callTool("grep_documents", {
+        urns: [documentUrn],
+        pattern: "^# Governed data change case",
+        context_chars: MAX_DATAHUB_DOCUMENT_CHARS,
+        max_matches_per_doc: 1,
+        start_offset: 0,
+      }), "document reread response");
+      const results = array(response.results, "document reread results");
+      if (
+        integer(response.documents_with_matches, "documents with matches") !== 1
+        || integer(response.total_matches, "document matches") !== 1
+        || results.length !== 1
+      ) {
+        throw new DataHubCaseStoreError("document reread did not return exactly one document");
+      }
+      const entity = record(results[0], "document result");
+      if (urn(entity.urn, "document") !== documentUrn) {
         throw new DataHubCaseStoreError("document reread did not return the requested document");
       }
-      const info = record(entity.info, "document info");
-      const contents = record(info.contents, "document contents");
-      if (contents._truncated === true) {
-        throw new DataHubCaseStoreError("DataHub document reread was truncated");
+      const matches = array(entity.matches, "document excerpts");
+      if (matches.length !== 1 || integer(record(matches[0], "document excerpt").position, "document match position") !== 0) {
+        throw new DataHubCaseStoreError("DataHub document reread was incomplete");
       }
-      const value = parseCaseDocument(text(contents.text, "document content"));
-      if (info.title !== caseDocumentTitle(value.caseKey)) {
+      const content = text(record(matches[0], "document excerpt").excerpt, "document content");
+      let value: ChangeCase;
+      try {
+        value = parseCaseDocument(content);
+      } catch (error) {
+        throw new DataHubCaseStoreError("DataHub document reread was truncated or invalid", { cause: error });
+      }
+      if (entity.title !== caseDocumentTitle(value.caseKey)) {
         throw new DataHubCaseStoreError("DataHub document title does not match its case key");
       }
       return value;
@@ -164,6 +187,14 @@ export class DataHubCaseStore {
   async saveAndVerifyCase(value: ChangeCase, verifiedAt: string): Promise<ChangeCase> {
     try {
       const existingUrn = await this.findCase(value.caseKey);
+      if (existingUrn !== undefined) {
+        const existing = await this.loadCase(existingUrn);
+        const intended = sealCase({
+          ...value,
+          dataHub: { verified: true, documentUrn: existingUrn, verifiedAt },
+        });
+        if (serializeCase(existing) === serializeCase(intended)) return existing;
+      }
       const safeAdmission = value.admission === undefined
         ? undefined
         : {

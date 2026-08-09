@@ -5,7 +5,7 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { readDiff, resolveRevision } from "../../src/git/repository";
+import { readCommitTimestamp, readDiff, resolveRevision } from "../../src/git/repository";
 
 const repositories: string[] = [];
 
@@ -46,6 +46,7 @@ describe("Git evidence", () => {
     const diff = await readDiff(repo, "HEAD~1", "HEAD");
 
     expect(head).toMatch(/^[a-f0-9]{40}$/);
+    expect(await readCommitTimestamp(repo, head)).toMatch(/^\d{4}-\d{2}-\d{2}T/);
     expect(diff).toContain("-      - name: email");
     expect(diff).toContain("+      - name: email_address");
   });

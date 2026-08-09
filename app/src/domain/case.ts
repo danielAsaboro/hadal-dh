@@ -112,6 +112,7 @@ const LineagePathSchema = z
 export const ImpactEvidenceSchema = z
   .object({
     complete: z.boolean(),
+    capabilities: z.object({ datasetAssertions: z.boolean() }).strict().readonly().optional(),
     source: EvidenceAssetSchema,
     schemaFields: z.array(nonEmpty).readonly(),
     paths: z.array(LineagePathSchema).readonly(),

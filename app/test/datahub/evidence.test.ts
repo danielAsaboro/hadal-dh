@@ -177,6 +177,15 @@ function completeReplies(): Readonly<Record<string, readonly Reply[]>> {
 }
 
 describe("DataHub evidence collection", () => {
+  it("records unavailable optional assertion capability without inventing assertions", async () => {
+    const replies = completeReplies();
+    const tools = new CapturedToolResults(replies) as CapturedToolResults & { supportsTool(name: string): boolean };
+    tools.supportsTool = (name: string) => name !== "get_dataset_assertions";
+    const evidence = await collectEvidence(tools, change);
+    expect(evidence.capabilities).toEqual({ datasetAssertions: false });
+    expect(evidence.assets.every((asset) => asset.assertions.length === 0)).toBe(true);
+  });
+
   it("collects exact governed evidence and removes query literals", async () => {
     const tools = new CapturedToolResults(completeReplies());
 
@@ -206,6 +215,36 @@ describe("DataHub evidence collection", () => {
       max_results: 50,
       offset: 0,
     });
+  });
+
+  it("accepts verified column-level paths whose endpoints are schema-field URNs", async () => {
+    const replies = { ...completeReplies() } as Record<string, readonly Reply[]>;
+    const paths = [...(replies.get_lineage_paths_between ?? [])];
+    paths[0] = {
+      metadata: { direction: "downstream" },
+      target: { urn: consumerUrn },
+      pathCount: 1,
+      paths: [{ path: [
+        entity(`urn:li:schemaField:(${sourceUrn},email)`, "schemaField", "email", "urn:li:corpuser:producer"),
+        entity(`urn:li:schemaField:(${consumerUrn},customer_email)`, "schemaField", "customer_email", "urn:li:corpuser:orders_owner"),
+      ] }],
+    };
+    replies.get_lineage_paths_between = paths;
+    const evidence = await collectEvidence(new CapturedToolResults(replies), change);
+    expect(evidence.paths[0]?.nodes).toEqual([
+      `urn:li:schemaField:(${sourceUrn},email)`,
+      `urn:li:schemaField:(${consumerUrn},customer_email)`,
+    ]);
+  });
+
+  it("normalizes the official MCP omission of an empty queries array", async () => {
+    const replies = { ...completeReplies() } as Record<string, readonly Reply[]>;
+    replies.get_dataset_queries = [
+      { start: 0, count: 10, total: 0 },
+      { start: 0, count: 10, total: 0 },
+    ];
+    const evidence = await collectEvidence(new CapturedToolResults(replies), change);
+    expect(evidence.assets.filter((asset) => asset.type === "dataset").every((asset) => asset.queries.length === 0)).toBe(true);
   });
 
   it("rejects ambiguous exact-name resolution", async () => {

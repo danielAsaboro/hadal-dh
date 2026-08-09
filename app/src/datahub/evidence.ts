@@ -20,6 +20,7 @@ import {
 
 export interface DataHubToolCaller {
   callTool(name: string, input: Readonly<Record<string, unknown>>): Promise<unknown>;
+  supportsTool?(name: string): boolean;
 }
 
 export class DataHubEvidenceError extends Error {
@@ -31,6 +32,12 @@ type SummaryPath = Readonly<{
   downstream: Asset;
   downstreamColumns: readonly string[];
 }>;
+
+function pathEndpointMatches(nodeUrn: string, assetUrn: string, column?: string): boolean {
+  if (nodeUrn === assetUrn) return true;
+  if (column === undefined) return nodeUrn.startsWith(`urn:li:schemaField:(${assetUrn},`);
+  return nodeUrn === `urn:li:schemaField:(${assetUrn},${column})`;
+}
 
 function asEvidenceError(error: unknown): DataHubEvidenceError {
   if (error instanceof DataHubEvidenceError) return error;
@@ -141,8 +148,13 @@ async function exactPaths(
       for (const pathValue of paths) {
         const nodes = array(record(pathValue, "lineage path").path, "lineage path nodes")
           .map((node) => assetFromEntity(node).urn);
-        if (nodes[0] !== source.urn || nodes.at(-1) !== summary.downstream.urn) {
-          throw new DataHubEvidenceError("exact lineage path endpoints do not match the request");
+        if (
+          !pathEndpointMatches(nodes[0] as string, source.urn, targetColumn === undefined ? undefined : oldColumn)
+          || !pathEndpointMatches(nodes.at(-1) as string, summary.downstream.urn, targetColumn)
+        ) {
+          throw new DataHubEvidenceError(
+            `exact lineage path endpoints do not match the request: expected ${source.urn} -> ${summary.downstream.urn}, received ${nodes.join(" -> ")}`,
+          );
         }
         normalized.push({
           sourceUrn: source.urn,
@@ -162,7 +174,9 @@ function normalizeQueries(datasetUrn: string, response: unknown): ImpactEvidence
   const start = integer(payload.start, "query start");
   const total = integer(payload.total, "query total");
   const count = integer(payload.count, "query count");
-  const queries = array(payload.queries, "queries");
+  const queries = payload.queries === undefined && total === 0
+    ? []
+    : array(payload.queries, "queries");
   if (start !== 0 || queries.length > count || queries.length !== total) {
     throw new DataHubEvidenceError("dataset query response is incomplete");
   }
@@ -213,6 +227,7 @@ async function normalizeAssertions(
   datasetUrn: string,
   column: string | undefined,
 ): Promise<ImpactEvidence["assets"][number]["assertions"]> {
+  if (tools.supportsTool?.("get_dataset_assertions") === false) return [];
   const base: Record<string, unknown> = {
     urn: datasetUrn,
     start: 0,
@@ -282,7 +297,6 @@ async function assetContexts(
         ? oldColumn
         : summaries.find((summary) => summary.downstream.urn === asset.urn)?.downstreamColumns[0];
       const queryInput: Record<string, unknown> = { urn: asset.urn, start: 0, count: 10 };
-      if (column !== undefined) queryInput.column = column;
       queries = normalizeQueries(asset.urn, await tools.callTool("get_dataset_queries", queryInput));
       assertions = await normalizeAssertions(tools, asset.urn, column);
     }
@@ -347,7 +361,16 @@ export async function collectEvidence(
     }));
     const paths = await exactPaths(tools, source, change.oldName, summaries);
     const assets = await assetContexts(tools, source, summaries, change.oldName);
-    return ImpactEvidenceSchema.parse({ complete: true, source, schemaFields: fields, paths, assets });
+    return ImpactEvidenceSchema.parse({
+      complete: true,
+      capabilities: {
+        datasetAssertions: tools.supportsTool?.("get_dataset_assertions") !== false,
+      },
+      source,
+      schemaFields: fields,
+      paths,
+      assets,
+    });
   } catch (error) {
     if (error instanceof DataHubNormalizationError || error instanceof Error) {
       throw asEvidenceError(error);

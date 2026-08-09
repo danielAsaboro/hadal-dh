@@ -13,9 +13,14 @@ describe("runtime configuration", () => {
       CUTSET_DATAHUB_MCP_ARGS: '["-y","@acryldata/mcp-server-datahub"]',
       DATAHUB_GMS_URL: "http://localhost:8080",
       TOOLS_IS_MUTATION_ENABLED: "true",
+      DATA_QUALITY_TOOLS_ENABLED: "true",
     })).toEqual({
       kind: "stdio", command: "npx", args: ["-y", "@acryldata/mcp-server-datahub"],
-      env: { DATAHUB_GMS_URL: "http://localhost:8080", TOOLS_IS_MUTATION_ENABLED: "true" },
+      env: {
+        DATAHUB_GMS_URL: "http://localhost:8080",
+        TOOLS_IS_MUTATION_ENABLED: "true",
+        DATA_QUALITY_TOOLS_ENABLED: "true",
+      },
     });
   });
 

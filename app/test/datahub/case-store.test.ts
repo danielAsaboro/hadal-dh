@@ -46,11 +46,12 @@ class CapturedDocumentService implements DataHubToolCaller {
   truncateRead = false;
 
   async callTool(name: string, input: Readonly<Record<string, unknown>>): Promise<unknown> {
-    if (name === "search") {
+    if (name === "search_documents") {
       const results = [...this.documents.entries()].map(([urn, document]) => ({
         entity: { urn, info: { title: document.title } },
       }));
-      return { start: 0, count: results.length, total: results.length, searchResults: results, facets: [] };
+      if (results.length === 0) return { start: 0, count: 10, total: 0 };
+      return { start: 0, count: 10, total: results.length, searchResults: results, facets: [] };
     }
     if (name === "save_document") {
       this.saves.push(input);
@@ -59,23 +60,19 @@ class CapturedDocumentService implements DataHubToolCaller {
       this.documents.set(urn, { title: String(input.title), content: String(input.content) });
       return { success: true, urn, message: "saved", author: "Cutset" };
     }
-    if (name === "get_entities") {
+    if (name === "grep_documents") {
       const urns = input.urns as readonly string[];
-      return urns.flatMap((urn) => {
+      const results = urns.flatMap((urn) => {
         const document = this.documents.get(urn);
         if (!document) return [];
         return [{
           urn,
-          type: "DOCUMENT",
-          info: {
-            title: document.title,
-            contents: {
-              text: this.truncateRead ? `${document.content.slice(0, 20)}...` : document.content,
-              ...(this.truncateRead ? { _truncated: true, _originalLengthChars: document.content.length } : {}),
-            },
-          },
+          title: document.title,
+          matches: [{ excerpt: this.truncateRead ? `${document.content.slice(0, 20)}...` : document.content, position: 0 }],
+          total_matches: 1,
         }];
       });
+      return { results, total_matches: results.length, documents_with_matches: results.length };
     }
     throw new Error(`unexpected tool call: ${name}`);
   }
@@ -99,6 +96,16 @@ describe("DataHub case persistence", () => {
     expect(service.saves.slice(1).every((save) => save.urn === documentUrn)).toBe(true);
     expect(await store.findCase(first.caseKey)).toBe(documentUrn);
     expect((await store.loadCase(documentUrn)).contentHash).toBe(second.contentHash);
+  });
+
+  it("does not rewrite an already verified identical case", async () => {
+    const service = new CapturedDocumentService();
+    const store = new DataHubCaseStore(service);
+    const value = changeCase();
+    const first = await store.saveAndVerifyCase(value, "2026-08-09T10:05:00.000Z");
+    const second = await store.saveAndVerifyCase(value, "2026-08-09T10:05:00.000Z");
+    expect(second).toEqual(first);
+    expect(service.saves).toHaveLength(2);
   });
 
   it("rejects incomplete search and duplicate exact documents before mutation", async () => {

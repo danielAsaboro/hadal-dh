@@ -61,6 +61,22 @@ export async function resolveRevision(
   ).trim();
 }
 
+export async function readCommitTimestamp(repo: string, revision: string): Promise<string> {
+  await verifyRepository(repo);
+  await verifyRevision(repo, revision);
+  const value = (await runGit(repo, [
+    "show",
+    "--no-patch",
+    "--format=%cI",
+    "--end-of-options",
+    revision,
+  ])).trim();
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$/.test(value)) {
+    throw new GitContextError(`Git returned an invalid commit timestamp: ${revision}`);
+  }
+  return value;
+}
+
 export async function readDiff(
   repo: string,
   base: string,

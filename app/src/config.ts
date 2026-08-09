@@ -36,6 +36,7 @@ export function dataHubMcpConfigFromEnv(env: Environment = process.env): DataHub
     "DATAHUB_GMS_URL",
     "DATAHUB_GMS_TOKEN",
     "TOOLS_IS_MUTATION_ENABLED",
+    "DATA_QUALITY_TOOLS_ENABLED",
     "SAVE_DOCUMENT_TOOL_ENABLED",
     "SAVE_DOCUMENT_RESTRICT_UPDATES",
     "SAVE_DOCUMENT_PARENT_TITLE",

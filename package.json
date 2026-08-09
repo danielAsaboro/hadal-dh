@@ -1,0 +1,11 @@
+{
+  "name": "cutset-workspace",
+  "private": true,
+  "workspaces": ["app"],
+  "scripts": {
+    "build": "npm --workspace app run build",
+    "dev": "npm --workspace app run dev",
+    "test": "npm --workspace app run test",
+    "typecheck": "npm --workspace app run typecheck"
+  }
+}

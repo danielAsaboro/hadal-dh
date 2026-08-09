@@ -8,6 +8,11 @@ dist/
 
 # Virtual environments
 .venv/
+node_modules/
+app/dist/
+app/coverage/
+app/playwright-report/
+app/test-results/
 venv/
 env/
 

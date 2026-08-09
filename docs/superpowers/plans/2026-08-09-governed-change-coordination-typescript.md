@@ -6,7 +6,7 @@
 
 **Architecture:** A single TypeScript workspace under `app/` owns domain contracts, CLI, API, connectors, and React UI. Pure Zod-validated domain functions compile DataHub MCP evidence and evaluate policy. Boundary adapters use the official MCP SDK, GitHub REST API, and real child processes; every remote mutation is reread and verified. The existing Python implementation remains untouched until the TypeScript replacement passes live parity.
 
-**Tech Stack:** Node.js 24, TypeScript 5, pnpm, Zod, Commander, `@modelcontextprotocol/sdk`, Fastify, React, Vite, Vitest, Testing Library, Playwright, YAML, `node-sql-parser`, native `fetch`, Node `child_process` and `crypto`.
+**Tech Stack:** Node.js 24, TypeScript 5, npm workspaces, Zod, Commander, `@modelcontextprotocol/sdk`, Fastify, React, Vite, Vitest, Testing Library, Playwright, YAML, `node-sql-parser`, native `fetch`, Node `child_process` and `crypto`.
 
 ## Global Constraints
 
@@ -25,16 +25,16 @@
 ### Task 1: TypeScript workspace and canonical case contract
 
 **Files:**
-- Create: `package.json`, `pnpm-workspace.yaml`, `app/package.json`, `app/tsconfig.json`, `app/vitest.config.ts`
+- Create: `package.json`, `app/package.json`, `app/tsconfig.json`, `app/vitest.config.ts`
 - Create: `app/src/domain/case.ts`, `app/src/domain/identity.ts`, `app/src/domain/serialization.ts`
 - Test: `app/test/domain/case.test.ts`, `app/test/domain/serialization.test.ts`
 
 **Interfaces:** Produces `ChangeCaseSchema`, readonly inferred types, `caseKey`, `revisionKey`, `workKey`, `serializeCase`, `parseCase`, and `caseContentHash`.
 
 - [ ] Write failing tests proving stable identity, head/evidence revision invalidation, order-independent work keys, immutable readonly values, byte-stable round trips, unknown-version rejection, and tamper detection.
-- [ ] Run `pnpm --dir app test -- domain` and verify failure because modules do not exist.
+- [ ] Run `npm --workspace app test -- domain` and verify failure because modules do not exist.
 - [ ] Implement SHA-256 identities using length-prefixed UTF-8 parts, Zod discriminated unions, schema version `1`, recursively sorted canonical JSON, and a hash excluding only `contentHash`.
-- [ ] Run `pnpm --dir app test -- domain` and `pnpm --dir app typecheck`; expect PASS.
+- [ ] Run `npm --workspace app test -- domain` and `npm --workspace app run typecheck`; expect PASS.
 - [ ] Run the untouched Python suite; expect 72 pass and two live skips.
 - [ ] Commit `feat: add TypeScript change case contract`.
 
@@ -168,6 +168,6 @@
 - [ ] Rerun and prove the same DataHub document and GitHub issues update without duplication.
 - [ ] Compare required evidence and outputs with the preserved Python slice; only then retire Python from the primary README path.
 - [ ] Record sanitized real examples and exact proof; no expected or fabricated output.
-- [ ] Run `pnpm test`, `pnpm typecheck`, `pnpm build`, Playwright, the preserved Python suite, live integrations, and `git diff --check`.
+- [ ] Run `npm test`, `npm run typecheck`, `npm run build`, Playwright, the preserved Python suite, live integrations, and `git diff --check`.
 - [ ] Complete every hackathon requirement, public repo/license/setup, under-three-minute video, and feedback artifact.
 - [ ] Commit `docs: ship governed coordination submission`.

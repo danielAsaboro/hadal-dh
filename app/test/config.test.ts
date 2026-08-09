@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { aiConfigFromEnv, ConfigError, dataHubMcpConfigFromEnv, githubConfigFromEnv, parseCommand, warnLegacyProductEnv } from "../src/config";
+import { aiConfigFromEnv, ConfigError, dataHubMcpConfigFromEnv, githubConfigFromEnv, parseCommand, qvacConfigFromEnv, warnLegacyProductEnv } from "../src/config";
 
 describe("runtime configuration", () => {
   it("builds explicit real MCP HTTP and stdio configurations", () => {
@@ -64,6 +64,32 @@ describe("runtime configuration", () => {
       CHANGEMARSHAL_AI_MODEL: "governed-model",
     })).toEqual({ baseUrl: "https://models.example/v1", apiKey: "real-secret", model: "governed-model" });
     expect(() => aiConfigFromEnv({ CHANGEMARSHAL_AI_MODEL: "missing-transport" })).toThrow(/AI_BASE_URL/i);
+  });
+
+  it("defaults QVAC to a managed 27B tool-capable local model", () => {
+    expect(qvacConfigFromEnv({})).toEqual({
+      mode: "managed",
+      model: "qwen3.6-27b",
+      contextSize: 32768,
+      reasoningBudget: 0,
+    });
+  });
+
+  it("requires an explicit endpoint for an externally managed QVAC server", () => {
+    expect(qvacConfigFromEnv({
+      CHANGEMARSHAL_QVAC_MODE: "external",
+      CHANGEMARSHAL_QVAC_BASE_URL: "http://127.0.0.1:11435/v1",
+      CHANGEMARSHAL_QVAC_MODEL: "qwen3.6-35b-a3b",
+      CHANGEMARSHAL_QVAC_API_KEY: "local-only",
+    })).toEqual({
+      mode: "external",
+      baseUrl: "http://127.0.0.1:11435/v1",
+      apiKey: "local-only",
+      model: "qwen3.6-35b-a3b",
+      contextSize: 32768,
+      reasoningBudget: 0,
+    });
+    expect(() => qvacConfigFromEnv({ CHANGEMARSHAL_QVAC_MODE: "external" })).toThrow(/QVAC_BASE_URL/i);
   });
 
   it("emits one actionable warning for legacy environment variables", () => {

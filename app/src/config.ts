@@ -2,6 +2,15 @@ import type { DataHubMcpConfig } from "./datahub/mcp-client";
 
 type Environment = Readonly<Record<string, string | undefined>>;
 
+export type QvacRuntimeConfig = Readonly<{
+  mode: "managed" | "external";
+  model: string;
+  contextSize: number;
+  reasoningBudget: number;
+  baseUrl?: string;
+  apiKey?: string;
+}>;
+
 export class ConfigError extends Error {
   override readonly name = "ConfigError";
 }
@@ -101,6 +110,32 @@ export function aiConfigFromEnv(env: Environment = process.env): Readonly<{
     throw new ConfigError("CHANGEMARSHAL_AI_BASE_URL, CHANGEMARSHAL_AI_API_KEY, and CHANGEMARSHAL_AI_MODEL are required for the AI SDK 7 brief");
   }
   return { baseUrl, apiKey, model };
+}
+
+function integerEnv(value: string | undefined, fallback: number, label: string, minimum: number): number {
+  if (value === undefined) return fallback;
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < minimum) throw new ConfigError(`${label} must be an integer greater than or equal to ${minimum}`);
+  return parsed;
+}
+
+export function qvacConfigFromEnv(env: Environment = process.env): QvacRuntimeConfig {
+  const mode = productEnv(env, "QVAC_MODE") ?? "managed";
+  if (mode !== "managed" && mode !== "external") throw new ConfigError("CHANGEMARSHAL_QVAC_MODE must be managed or external");
+  const model = productEnv(env, "QVAC_MODEL") ?? "qwen3.6-27b";
+  const contextSize = integerEnv(productEnv(env, "QVAC_CONTEXT_SIZE"), 32768, "CHANGEMARSHAL_QVAC_CONTEXT_SIZE", 1024);
+  const reasoningBudget = integerEnv(productEnv(env, "QVAC_REASONING_BUDGET"), 0, "CHANGEMARSHAL_QVAC_REASONING_BUDGET", -1);
+  if (mode === "managed") return { mode, model, contextSize, reasoningBudget };
+  const baseUrl = productEnv(env, "QVAC_BASE_URL");
+  if (!baseUrl) throw new ConfigError("CHANGEMARSHAL_QVAC_BASE_URL is required in external QVAC mode");
+  return {
+    mode,
+    baseUrl,
+    apiKey: productEnv(env, "QVAC_API_KEY") ?? "qvac",
+    model,
+    contextSize,
+    reasoningBudget,
+  };
 }
 
 export function parseCommand(value: string): readonly string[] {

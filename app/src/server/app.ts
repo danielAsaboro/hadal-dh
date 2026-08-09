@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
 import type { CasesService, StatusSurface, WorkSurface } from "../application/cases";
+import type { AgentRunSnapshot } from "../ai/run-events";
 import type { ChangeCase, ValidationReceipt } from "../domain/case";
 import { resolveRevision } from "../git/repository";
 import { generateCompatibilityMigration } from "../remediation/generate";
@@ -25,6 +26,16 @@ export interface ServerDependencies {
   readonly application: CaseApplication | CasesService;
   readonly github: () => WorkSurface & StatusSurface;
   readonly repoRoot?: string;
+  readonly agent?: AgentRunApplication;
+}
+
+export interface AgentRunApplication {
+  health(): Promise<Readonly<{ available: true; provider: "qvac"; modelId: string; managed: boolean }>>;
+  start(input: Readonly<{ caseKey: string; headSha: string; prompt: string }>): Promise<AgentRunSnapshot>;
+  show(runId: string): Promise<AgentRunSnapshot>;
+  resolveApproval(input: Readonly<{
+    runId: string; token: string; currentHeadSha: string; approved: boolean; reason?: string;
+  }>): Promise<AgentRunSnapshot>;
 }
 
 const caseParams = z.object({ caseKey: z.string().regex(/^[a-f0-9]{24}$/) }).strict();
@@ -38,6 +49,13 @@ const validationBody = z.object({
   artifactPaths: z.array(z.string().min(1)),
   timeoutMs: z.number().int().min(1).max(300_000).default(120_000),
 }).strict();
+const startRunBody = z.object({
+  caseKey: z.string().regex(/^[a-f0-9]{24}$/),
+  prompt: z.string().trim().min(1).max(2_000),
+}).strict();
+const runParams = z.object({ runId: z.string().min(1).max(200) }).strict();
+const approvalParams = runParams.extend({ token: z.string().min(1).max(300) }).strict();
+const approvalBody = z.object({ approved: z.boolean(), reason: z.string().trim().min(1).max(500).optional() }).strict();
 
 export function createServer(dependencies: ServerDependencies): FastifyInstance {
   const server = Fastify({ logger: false, bodyLimit: 1_000_000 });
@@ -48,6 +66,40 @@ export function createServer(dependencies: ServerDependencies): FastifyInstance 
     void reply.status(status).send({ error: name, message });
   });
   server.get("/api/health", async () => ({ ok: true, service: "changemarshal" }));
+  server.get("/api/agent/health", async (_request, reply) => {
+    if (dependencies.agent === undefined) return await reply.status(503).send({ available: false, message: "QVAC agent runtime is not configured" });
+    return await dependencies.agent.health();
+  });
+  server.post("/api/agent/runs", async (request, reply) => {
+    if (dependencies.agent === undefined) return await reply.status(503).send({ message: "QVAC agent runtime is not configured" });
+    const body = startRunBody.parse(request.body);
+    const value = await dependencies.application.show(body.caseKey);
+    return await reply.status(202).send(await dependencies.agent.start({
+      caseKey: value.caseKey, headSha: value.revision.headSha, prompt: body.prompt,
+    }));
+  });
+  server.get("/api/agent/runs/:runId", async (request, reply) => {
+    if (dependencies.agent === undefined) return await reply.status(503).send({ message: "QVAC agent runtime is not configured" });
+    const { runId } = runParams.parse(request.params);
+    return await dependencies.agent.show(runId);
+  });
+  server.get("/api/agent/runs/:runId/events", async (request, reply) => {
+    if (dependencies.agent === undefined) return await reply.status(503).send({ message: "QVAC agent runtime is not configured" });
+    const { runId } = runParams.parse(request.params);
+    const value = await dependencies.agent.show(runId);
+    const payload = value.events.map((event) => `id: ${event.sequence}\nevent: ${event.kind}\ndata: ${JSON.stringify(event)}\n\n`).join("");
+    return await reply.header("Cache-Control", "no-cache").type("text/event-stream").send(payload);
+  });
+  server.post("/api/agent/runs/:runId/approvals/:token", async (request, reply) => {
+    if (dependencies.agent === undefined) return await reply.status(503).send({ message: "QVAC agent runtime is not configured" });
+    const { runId, token } = approvalParams.parse(request.params);
+    const body = approvalBody.parse(request.body);
+    const value = await dependencies.application.show((await dependencies.agent.show(runId)).caseKey);
+    return await dependencies.agent.resolveApproval({
+      runId, token, currentHeadSha: value.revision.headSha, approved: body.approved,
+      ...(body.reason === undefined ? {} : { reason: body.reason }),
+    });
+  });
   server.get("/api/cases", async () => await dependencies.application.list());
   server.get("/api/cases/:caseKey", async (request) => {
     const { caseKey } = caseParams.parse(request.params);

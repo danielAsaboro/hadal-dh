@@ -68,7 +68,7 @@ function readyFacts(): ChangeCase {
       finishedAt: now,
       valid: true,
     })),
-    approvalDecisions: value.approvalRequirements.map((requirement) => ({
+    approvalDecisions: value.approvalRequirements.map((requirement, index) => ({
       requirementKey: requirement.requirementKey,
       revisionKey: value.revision.revisionKey,
       headSha: value.revision.headSha,
@@ -78,8 +78,10 @@ function readyFacts(): ChangeCase {
       verdict: ApprovalVerdict.Approve,
       decidedAt: now,
       source: "github" as const,
+      externalId: String(100 + index),
+      url: `https://github.com/acme/warehouse/pull/7#pullrequestreview-${100 + index}`,
     })),
-    dataHub: { verified: true, documentUrn: "urn:li:document:cutset", verifiedAt: now },
+    dataHub: { verified: true, documentUrn: "urn:li:document:changemarshal", verifiedAt: now },
   };
 }
 
@@ -137,6 +139,21 @@ describe("deterministic admission policy", () => {
     expect(result.admission.blockers).toContain(`PROJECTION_UNVERIFIED:${value.workItems[0]?.workKey}`);
     expect(result.admission.blockers).toContain(`VALIDATION_FAILED:${value.workItems[0]?.workKey}`);
     expect(result.admission.blockers).toContain(`APPROVAL_REJECTED:${value.approvalRequirements[0]?.requirementKey}`);
+  });
+
+  it("blocks approval records that lack a verified external review receipt", () => {
+    const original = readyFacts();
+    const approvalDecisions = original.approvalDecisions.map(({ externalId: _id, url: _url, ...decision }) => decision);
+
+    const result = evaluateCase({ ...original, approvalDecisions }, {
+      currentHeadSha: "head",
+      evaluatedAt: now,
+    });
+
+    expect(result.admission.allowed).toBe(false);
+    expect(result.admission.blockers).toContain(
+      `APPROVAL_PROVENANCE_MISSING:${original.approvalRequirements[0]!.requirementKey}`,
+    );
   });
 
   it("blocks missing and ambiguous graph ownership before external work", () => {

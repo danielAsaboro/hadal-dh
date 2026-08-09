@@ -2,7 +2,7 @@ version: 2
 models:
   - name: customers_compatibility
     description: >-
-      Compatibility contract for Cutset case fbe74aa76740cd72a09bc797 at revision 0a2d9bc865ccbf226e0ec672.
+      Compatibility contract for ChangeMarshal case fbe74aa76740cd72a09bc797 at revision 0a2d9bc865ccbf226e0ec672.
     columns:
       - name: email
         description: >-

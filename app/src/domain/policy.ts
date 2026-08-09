@@ -103,6 +103,8 @@ export function evaluateCase(
       || decision.actorLogin !== expectedLogin
     ) {
       blockers.add(`APPROVAL_UNVERIFIED:${requirement.requirementKey}`);
+    } else if (!decision.externalId || !decision.url) {
+      blockers.add(`APPROVAL_PROVENANCE_MISSING:${requirement.requirementKey}`);
     } else if (decision.verdict === ApprovalVerdict.Reject) {
       blockers.add(`APPROVAL_REJECTED:${requirement.requirementKey}`);
     }

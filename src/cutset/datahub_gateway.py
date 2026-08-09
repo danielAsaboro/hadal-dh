@@ -545,7 +545,7 @@ class DataHubGateway:
             self._invoke(
                 "search_documents",
                 {
-                    "query": f'/q "Cutset impact {analysis_key}"',
+                    "query": f'/q "impact {analysis_key}"',
                     "num_results": 10,
                     "offset": 0,
                 },
@@ -558,7 +558,10 @@ class DataHubGateway:
         total = response.get("total")
         if not isinstance(total, int) or total > len(raw_results):
             raise DataHubWriteBackError("document search results are incomplete")
-        expected_title = f"Cutset impact {analysis_key}"
+        expected_titles = {
+            f"ChangeMarshal impact {analysis_key}",
+            f"Cutset impact {analysis_key}",
+        }
         urns = {
             entity["urn"]
             for result in raw_results
@@ -566,7 +569,7 @@ class DataHubGateway:
             and isinstance((entity := result.get("entity")), Mapping)
             and isinstance(entity.get("urn"), str)
             and isinstance(entity.get("info"), Mapping)
-            and entity["info"].get("title") == expected_title
+            and entity["info"].get("title") in expected_titles
         }
         if len(urns) > 1:
             raise DataHubWriteBackError(
@@ -577,7 +580,7 @@ class DataHubGateway:
     def write_back(
         self,
         report: ImpactReport,
-        tag_name: str = "cutset-at-risk",
+        tag_name: str = "changemarshal-at-risk",
     ) -> WriteBackResult:
         """Persist an impact document and tag only assets read in this analysis."""
         if not report.evidence.complete:
@@ -612,9 +615,9 @@ class DataHubGateway:
             existing_document = self._existing_document_urn(report.analysis_key)
             save_arguments: dict[str, object] = {
                 "document_type": "Analysis",
-                "title": f"Cutset impact {report.analysis_key}",
+                "title": f"ChangeMarshal impact {report.analysis_key}",
                 "content": render_markdown(report),
-                "topics": ["cutset", "schema-change", report.decision.severity.value],
+                "topics": ["changemarshal", "schema-change", report.decision.severity.value],
                 "related_assets": target_urns,
             }
             if existing_document is not None:

@@ -1,4 +1,4 @@
-"""Deterministic metadata graph used by Cutset's live DataHub demo."""
+"""Deterministic metadata graph used by ChangeMarshal's live DataHub demo."""
 
 from collections.abc import Sequence
 from typing import Type
@@ -32,6 +32,8 @@ class DemoQuery(Entity):
 
     def __init__(self, *, id: str, statement: str, subjects: Sequence[str]) -> None:
         super().__init__(QueryUrn(id=id))
+        # This legacy actor URN is intentionally stable so reruns update the
+        # already verified demo graph rather than manufacturing a replacement.
         audit = AuditStampClass(time=0, actor="urn:li:corpuser:cutset-demo")
         self._set_aspect(
             QueryPropertiesClass(
@@ -52,9 +54,9 @@ class DemoQuery(Entity):
 def build_demo_entities() -> Sequence[Entity]:
     """Build an idempotently upsertable dataset-to-model impact graph."""
     risk_tag = Tag(
-        name="cutset-at-risk",
-        display_name="Cutset: At Risk",
-        description="Applied by Cutset when a proposed change threatens downstream assets.",
+        name="changemarshal-at-risk",
+        display_name="ChangeMarshal: At Risk",
+        description="Applied by ChangeMarshal when a proposed change threatens downstream assets.",
         color="#D97706",
     )
     customer_tag = Tag(
@@ -65,8 +67,8 @@ def build_demo_entities() -> Sequence[Entity]:
     )
     glossary_node = GlossaryNode(
         id="cutset-demo",
-        display_name="Cutset Demo",
-        definition="Business concepts used in Cutset's controlled live proof.",
+        display_name="ChangeMarshal Demo",
+        definition="Business concepts used in ChangeMarshal's controlled live proof. The legacy ID preserves verified lineage.",
     )
     customer_identity = GlossaryTerm(
         id="customer-identity",
@@ -78,7 +80,7 @@ def build_demo_entities() -> Sequence[Entity]:
         platform="snowflake",
         name="analytics.customers",
         display_name="Customers",
-        description="Canonical customer records for the Cutset live demo.",
+        description="Canonical customer records for the ChangeMarshal live demo.",
         schema=[
             ("customer_id", "VARCHAR", "Stable customer identifier."),
             ("email", "VARCHAR", "Customer email used by downstream features."),
@@ -102,8 +104,8 @@ def build_demo_entities() -> Sequence[Entity]:
     training_flow = DataFlow(
         platform="airflow",
         name="cutset-demo",
-        display_name="Cutset Demo Training",
-        description="Controlled training pipeline for Cutset's live proof.",
+        display_name="ChangeMarshal Demo Training",
+        description="Controlled training pipeline for ChangeMarshal's live proof.",
     )
     training_job = DataJob(
         name="train-churn",

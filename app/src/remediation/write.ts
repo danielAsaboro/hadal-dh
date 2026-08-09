@@ -27,20 +27,43 @@ export async function writeRemediationArtifacts(
       if (error.code === "ENOENT") return undefined;
       throw error;
     });
+    let legacyTarget: string | undefined;
+    let legacyExisting: string | undefined;
+    if (artifact.legacy !== undefined) {
+      legacyTarget = resolve(root, artifact.legacy.relativePath);
+      const legacyEscaped = relative(root, legacyTarget);
+      if (isAbsolute(artifact.legacy.relativePath)
+        || legacyEscaped === ".."
+        || legacyEscaped.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`)) {
+        throw new RemediationWriteError(`legacy remediation path escapes repository: ${artifact.legacy.relativePath}`);
+      }
+      legacyExisting = await readFile(legacyTarget, "utf8").catch((error: NodeJS.ErrnoException) => {
+        if (error.code === "ENOENT") return undefined;
+        throw error;
+      });
+      if (legacyExisting !== undefined && legacyExisting !== artifact.legacy.content) {
+        throw new RemediationWriteError(`conflicting legacy remediation artifact: ${artifact.legacy.relativePath}`);
+      }
+    }
     if (existing !== undefined && existing !== artifact.content) {
       throw new RemediationWriteError(`refusing to overwrite changed remediation artifact: ${artifact.relativePath}`);
     }
-    if (existing === artifact.content) continue;
-    await mkdir(dirname(target), { recursive: true });
-    const temporary = `${target}.${randomUUID()}.tmp`;
-    try {
-      await writeFile(temporary, artifact.content, { encoding: "utf8", mode: 0o600, flag: "wx" });
-      await rename(temporary, target);
-      written.push(artifact.relativePath);
-    } catch (error) {
-      await unlink(temporary).catch(() => undefined);
-      throw error;
+    if (existing !== artifact.content) {
+      await mkdir(dirname(target), { recursive: true });
+      const temporary = `${target}.${randomUUID()}.tmp`;
+      try {
+        await writeFile(temporary, artifact.content, { encoding: "utf8", mode: 0o600, flag: "wx" });
+        await rename(temporary, target);
+        if (await readFile(target, "utf8") !== artifact.content) {
+          throw new RemediationWriteError(`remediation artifact reread failed: ${artifact.relativePath}`);
+        }
+        written.push(artifact.relativePath);
+      } catch (error) {
+        await unlink(temporary).catch(() => undefined);
+        throw error;
+      }
     }
+    if (legacyExisting !== undefined && legacyTarget !== undefined) await unlink(legacyTarget);
   }
   return written;
 }

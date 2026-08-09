@@ -70,7 +70,7 @@ export class DataHubMcpClient implements DataHubToolCaller {
   ) {}
 
   static async connect(config: DataHubMcpConfig): Promise<DataHubMcpClient> {
-    const client = new Client({ name: "cutset", version: "0.2.0" });
+    const client = new Client({ name: "changemarshal", version: "0.2.0" });
     try {
       if (config.kind === "stdio") {
         if (!config.command.trim()) throw new DataHubMcpError("MCP command must be non-empty");

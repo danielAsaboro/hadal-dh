@@ -6,6 +6,29 @@ export class ConfigError extends Error {
   override readonly name = "ConfigError";
 }
 
+export function productEnv(env: Environment, suffix: string): string | undefined {
+  const canonicalName = `CHANGEMARSHAL_${suffix}`;
+  const legacyName = `CUTSET_${suffix}`;
+  const canonical = env[canonicalName];
+  const legacy = env[legacyName];
+  if (canonical !== undefined && legacy !== undefined && canonical !== legacy) {
+    throw new ConfigError(`conflicting ${canonicalName} and legacy ${legacyName}`);
+  }
+  return canonical ?? legacy;
+}
+
+export function warnLegacyProductEnv(
+  env: Environment = process.env,
+  write: (message: string) => void = (message) => process.stderr.write(message),
+): void {
+  const names = Object.keys(env)
+    .filter((name) => name.startsWith("CUTSET_") && env[name] !== undefined)
+    .sort();
+  if (names.length > 0) {
+    write(`ChangeMarshal accepted legacy environment variables ${names.join(", ")}; migrate them to the CHANGEMARSHAL_ prefix.\n`);
+  }
+}
+
 function jsonStringArray(value: string | undefined, label: string): readonly string[] {
   if (value === undefined) return [];
   try {
@@ -20,18 +43,18 @@ function jsonStringArray(value: string | undefined, label: string): readonly str
 }
 
 export function dataHubMcpConfigFromEnv(env: Environment = process.env): DataHubMcpConfig {
-  const url = env.CUTSET_DATAHUB_MCP_URL;
-  const command = env.CUTSET_DATAHUB_MCP_COMMAND;
+  const url = productEnv(env, "DATAHUB_MCP_URL");
+  const command = productEnv(env, "DATAHUB_MCP_COMMAND");
   if (url && command) throw new ConfigError("configure exactly one DataHub MCP transport");
   if (url) {
-    const token = env.CUTSET_DATAHUB_MCP_TOKEN;
+    const token = productEnv(env, "DATAHUB_MCP_TOKEN");
     return {
       kind: "http",
       url,
       ...(token ? { headers: { Authorization: `Bearer ${token}` } } : {}),
     };
   }
-  if (!command) throw new ConfigError("CUTSET_DATAHUB_MCP_URL or CUTSET_DATAHUB_MCP_COMMAND is required");
+  if (!command) throw new ConfigError("CHANGEMARSHAL_DATAHUB_MCP_URL or CHANGEMARSHAL_DATAHUB_MCP_COMMAND is required (legacy CUTSET_ aliases are accepted)");
   const names = [
     "DATAHUB_GMS_URL",
     "DATAHUB_GMS_TOKEN",
@@ -47,7 +70,7 @@ export function dataHubMcpConfigFromEnv(env: Environment = process.env): DataHub
   return {
     kind: "stdio",
     command,
-    args: jsonStringArray(env.CUTSET_DATAHUB_MCP_ARGS, "CUTSET_DATAHUB_MCP_ARGS"),
+    args: jsonStringArray(productEnv(env, "DATAHUB_MCP_ARGS"), "CHANGEMARSHAL_DATAHUB_MCP_ARGS"),
     env: childEnv,
   };
 }
@@ -57,13 +80,27 @@ export function githubConfigFromEnv(env: Environment = process.env): Readonly<{
   repository: string;
   pullNumber: number;
 }> {
-  const token = env.CUTSET_GITHUB_TOKEN;
-  const repository = env.CUTSET_GITHUB_REPOSITORY;
-  const pullNumber = Number(env.CUTSET_GITHUB_PULL_NUMBER);
+  const token = productEnv(env, "GITHUB_TOKEN");
+  const repository = productEnv(env, "GITHUB_REPOSITORY");
+  const pullNumber = Number(productEnv(env, "GITHUB_PULL_NUMBER"));
   if (!token || !repository || !Number.isInteger(pullNumber) || pullNumber < 1) {
-    throw new ConfigError("CUTSET_GITHUB_TOKEN, CUTSET_GITHUB_REPOSITORY, and a positive CUTSET_GITHUB_PULL_NUMBER are required");
+    throw new ConfigError("CHANGEMARSHAL_GITHUB_TOKEN, CHANGEMARSHAL_GITHUB_REPOSITORY, and a positive CHANGEMARSHAL_GITHUB_PULL_NUMBER are required (legacy CUTSET_ aliases are accepted)");
   }
   return { token, repository, pullNumber };
+}
+
+export function aiConfigFromEnv(env: Environment = process.env): Readonly<{
+  baseUrl: string;
+  apiKey: string;
+  model: string;
+}> {
+  const baseUrl = productEnv(env, "AI_BASE_URL");
+  const apiKey = productEnv(env, "AI_API_KEY");
+  const model = productEnv(env, "AI_MODEL");
+  if (!baseUrl || !apiKey || !model) {
+    throw new ConfigError("CHANGEMARSHAL_AI_BASE_URL, CHANGEMARSHAL_AI_API_KEY, and CHANGEMARSHAL_AI_MODEL are required for the AI SDK 7 brief");
+  }
+  return { baseUrl, apiKey, model };
 }
 
 export function parseCommand(value: string): readonly string[] {

@@ -11,10 +11,10 @@ import { runValidation, ValidationRunnerError } from "../../src/validation/runne
 const execFile = promisify(execFileCallback);
 
 async function repository(): Promise<Readonly<{ root: string; head: string }>> {
-  const root = await mkdtemp(join(tmpdir(), "cutset-validation-"));
+  const root = await mkdtemp(join(tmpdir(), "changemarshal-validation-"));
   await execFile("git", ["init", "-q", root]);
-  await execFile("git", ["-C", root, "config", "user.email", "cutset@example.com"]);
-  await execFile("git", ["-C", root, "config", "user.name", "Cutset Tests"]);
+  await execFile("git", ["-C", root, "config", "user.email", "changemarshal@example.com"]);
+  await execFile("git", ["-C", root, "config", "user.name", "ChangeMarshal Tests"]);
   await writeFile(join(root, "tracked.txt"), "tracked\n", "utf8");
   await execFile("git", ["-C", root, "add", "tracked.txt"]);
   await execFile("git", ["-C", root, "commit", "-qm", "base"]);
@@ -25,14 +25,14 @@ async function repository(): Promise<Readonly<{ root: string; head: string }>> {
 describe("executable validation receipts", () => {
   it("runs a real command and hashes bounded output and artifacts", async () => {
     const repo = await repository();
-    await mkdir(join(repo.root, ".cutset"));
-    await writeFile(join(repo.root, ".cutset", "artifact.sql"), "select 1;\n", "utf8");
+    await mkdir(join(repo.root, ".changemarshal"));
+    await writeFile(join(repo.root, ".changemarshal", "artifact.sql"), "select 1;\n", "utf8");
 
     const receipt = await runValidation({
       repoRoot: repo.root,
       workKey: "a".repeat(24), revisionKey: "b".repeat(24), headSha: repo.head,
       command: [process.execPath, "-e", "process.stdout.write('validated')"],
-      artifactPaths: [".cutset/artifact.sql"],
+      artifactPaths: [".changemarshal/artifact.sql"],
       timeoutMs: 5_000,
       now: (() => {
         const values = [new Date("2026-08-09T10:00:00.000Z"), new Date("2026-08-09T10:00:01.000Z")];
@@ -43,7 +43,7 @@ describe("executable validation receipts", () => {
     expect(receipt.valid).toBe(true);
     expect(receipt.exitCode).toBe(0);
     expect(receipt.stdoutSha256).toMatch(/^[a-f0-9]{64}$/);
-    expect(receipt.artifactHashes).toEqual([[".cutset/artifact.sql", expect.stringMatching(/^[a-f0-9]{64}$/)]]);
+    expect(receipt.artifactHashes).toEqual([[".changemarshal/artifact.sql", expect.stringMatching(/^[a-f0-9]{64}$/)]]);
   });
 
   it("records nonzero and timeout results as invalid", async () => {

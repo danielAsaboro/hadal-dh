@@ -26,13 +26,20 @@ function stableKey(parts: readonly string[]): string {
   return hash.digest("hex").slice(0, 24);
 }
 
+function stableRepositoryIdentity(repository: string): string {
+  const value = requireText(repository, "repository");
+  // Preserve persisted keys when the product repository moves from the legacy
+  // `cutset` slug to the canonical `change-marshal` slug.
+  return value.replace(/(^|\/)change-marshal(?=\/|$)/, "$1cutset");
+}
+
 export function caseKey(
   repository: string,
   sourceUrn: string,
   change: DbtColumnRename,
 ): string {
   return stableKey([
-    requireText(repository, "repository"),
+    stableRepositoryIdentity(repository),
     requireUrn(sourceUrn, "source"),
     change.kind,
     requireText(change.sourcePath, "source path"),

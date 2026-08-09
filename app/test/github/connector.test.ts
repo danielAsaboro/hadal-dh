@@ -18,14 +18,26 @@ type Issue = {
   html_url: string;
 };
 
+type Review = {
+  id: number;
+  user: { login: string };
+  state: string;
+  commit_id: string;
+  submitted_at: string;
+  html_url: string;
+};
+
 class GitHubContractServer {
   readonly issues = new Map<number, Issue>();
   readonly mutations: string[] = [];
   readonly eligible = new Set(["producer-gh", "consumer-gh"]);
+  readonly userAgents = new Set<string>();
   headSha = "head";
   actor = "producer-gh";
   permission = "write";
   status: Record<string, unknown> | undefined;
+  readonly requestedReviewers = new Set<string>();
+  readonly reviews: Review[] = [];
   private nextIssue = 1;
   private readonly server = createServer((request, response) => void this.route(request, response));
   url = "";
@@ -65,6 +77,7 @@ class GitHubContractServer {
   private async route(request: IncomingMessage, response: ServerResponse): Promise<void> {
     expect(request.headers.authorization).toBe("Bearer test-token");
     expect(request.headers["x-github-api-version"]).toBe("2022-11-28");
+    this.userAgents.add(String(request.headers["user-agent"]));
     const url = new URL(request.url ?? "/", this.url);
     const method = request.method ?? "GET";
     if (method === "GET" && url.pathname === "/repos/acme/warehouse") {
@@ -120,6 +133,29 @@ class GitHubContractServer {
     }
     if (method === "GET" && url.pathname === `/repos/acme/warehouse/collaborators/${this.actor}/permission`) {
       return this.json(response, 200, { permission: this.permission, user: { login: this.actor } });
+    }
+    const collaborator = /^\/repos\/acme\/warehouse\/collaborators\/([^/]+)\/permission$/.exec(url.pathname)?.[1];
+    if (method === "GET" && collaborator) {
+      const permission = this.eligible.has(collaborator) ? "write" : "read";
+      return this.json(response, 200, { permission, user: { login: collaborator } });
+    }
+    if (method === "GET" && url.pathname === "/repos/acme/warehouse/pulls/7/requested_reviewers") {
+      return this.json(response, 200, {
+        users: [...this.requestedReviewers].map((login) => ({ login })),
+        teams: [],
+      });
+    }
+    if (method === "POST" && url.pathname === "/repos/acme/warehouse/pulls/7/requested_reviewers") {
+      this.mutations.push("request-review");
+      const input = await this.body(request);
+      for (const login of input.reviewers as string[]) this.requestedReviewers.add(login);
+      return this.json(response, 201, {
+        number: 7,
+        requested_reviewers: [...this.requestedReviewers].map((login) => ({ login })),
+      });
+    }
+    if (method === "GET" && url.pathname === "/repos/acme/warehouse/pulls/7/reviews") {
+      return this.json(response, 200, this.reviews);
     }
     if (method === "POST" && url.pathname === "/repos/acme/warehouse/statuses/head") {
       this.mutations.push("status");
@@ -184,6 +220,7 @@ describe("real GitHub contract connector", () => {
     expect(service.mutations.filter((item) => item === "create")).toHaveLength(value.workItems.length);
     expect(service.mutations.filter((item) => item === "update")).toHaveLength(value.workItems.length);
     expect(second.map(({ workKey }) => workKey).sort()).toEqual(value.workItems.map(({ workKey }) => workKey).sort());
+    expect([...service.userAgents]).toEqual(["changemarshal-governed-change"]);
   });
 
   it("performs all head, mapping, and assignee checks before mutation", async () => {
@@ -210,17 +247,88 @@ describe("real GitHub contract connector", () => {
     expect(service.mutations).toEqual([]);
   });
 
+  it("migrates a legacy Cutset issue marker in place instead of creating a duplicate", async () => {
+    const value = plannedCase();
+    const legacyKey = value.workItems[0]!.workKey;
+    service.addIssue(`<!-- cutset-work-key:${legacyKey} -->`);
+
+    const projections = await connector.syncWork(value, "2026-08-09T10:05:00.000Z");
+
+    expect(service.mutations.filter((item) => item === "create"))
+      .toHaveLength(value.workItems.length - 1);
+    expect(service.mutations.filter((item) => item === "update")).toHaveLength(1);
+    expect(service.issues.get(1)?.body).toContain(`changemarshal-work-key:${legacyKey}`);
+    expect(projections.find((item) => item.workKey === legacyKey)?.externalId).toBe("1");
+  });
+
   it("verifies the token actor and publishes then rereads admission status", async () => {
     await expect(connector.verifyActor("producer-gh")).resolves.toEqual({ login: "producer-gh", permission: "write" });
-    await connector.publishAndVerifyStatus("head", false, "https://cutset.example/cases/one");
+    await connector.publishAndVerifyStatus("head", false, "https://change-marshal.example/cases/one");
 
     expect(service.status).toMatchObject({
       state: "failure",
-      context: "cutset/governed-change",
-      target_url: "https://cutset.example/cases/one",
+      context: "changemarshal/governed-change",
+      target_url: "https://change-marshal.example/cases/one",
     });
 
     service.permission = "read";
     await expect(connector.verifyActor("producer-gh")).rejects.toBeInstanceOf(GitHubConnectorError);
+  });
+
+  it("requests governed reviewers and verifies the request without duplication", async () => {
+    const value = plannedCase();
+
+    await connector.syncApprovalRequests(value);
+    await connector.syncApprovalRequests(value);
+
+    expect([...service.requestedReviewers].sort()).toEqual(["consumer-gh", "producer-gh"]);
+    expect(service.mutations.filter((item) => item === "request-review")).toHaveLength(1);
+  });
+
+  it("reconciles only current-head submitted reviews into governed decisions", async () => {
+    const value = plannedCase();
+    service.reviews.push(
+      {
+        id: 10,
+        user: { login: "producer-gh" },
+        state: "APPROVED",
+        commit_id: "old-head",
+        submitted_at: "2026-08-09T10:04:00Z",
+        html_url: "https://github.com/acme/warehouse/pull/7#pullrequestreview-10",
+      },
+      {
+        id: 11,
+        user: { login: "producer-gh" },
+        state: "APPROVED",
+        commit_id: "head",
+        submitted_at: "2026-08-09T10:05:00Z",
+        html_url: "https://github.com/acme/warehouse/pull/7#pullrequestreview-11",
+      },
+      {
+        id: 12,
+        user: { login: "consumer-gh" },
+        state: "CHANGES_REQUESTED",
+        commit_id: "head",
+        submitted_at: "2026-08-09T10:06:00Z",
+        html_url: "https://github.com/acme/warehouse/pull/7#pullrequestreview-12",
+      },
+    );
+
+    const decisions = await connector.reconcileApprovals(value);
+
+    expect(decisions).toEqual([
+      expect.objectContaining({
+        actorLogin: "consumer-gh",
+        verdict: "reject",
+        externalId: "12",
+        headSha: "head",
+      }),
+      expect.objectContaining({
+        actorLogin: "producer-gh",
+        verdict: "approve",
+        externalId: "11",
+        headSha: "head",
+      }),
+    ]);
   });
 });

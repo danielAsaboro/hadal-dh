@@ -32,7 +32,7 @@ function issueBody(value: ChangeCase, work: ChangeCase["workItems"][number]): st
   return [
     `# ${work.title}`,
     "",
-    `Cutset case \`${value.caseKey}\` requires this work for Git head \`${value.revision.headSha}\`.`,
+    `ChangeMarshal case \`${value.caseKey}\` requires this work for Git head \`${value.revision.headSha}\`.`,
     "",
     "## Affected DataHub assets",
     "",
@@ -42,7 +42,7 @@ function issueBody(value: ChangeCase, work: ChangeCase["workItems"][number]): st
     "",
     criteria,
     "",
-    "Closing this issue is not completion evidence. Cutset requires a current validation receipt and governed approval.",
+    "Closing this issue is not completion evidence. ChangeMarshal requires a current validation receipt and governed approval.",
     "",
     workMarker(work.workKey),
     caseMarker(value),
@@ -61,6 +61,32 @@ function normalizeIssue(value: unknown) {
     state: text(issue.state, "GitHub issue state"),
     assignee: text(assignee.login, "GitHub issue assignee login"),
     url: text(issue.html_url, "GitHub issue URL"),
+  };
+}
+
+function normalizeLogin(value: unknown, label: string): string {
+  return text(record(value, label).login, `${label} login`);
+}
+
+function normalizeReview(value: unknown) {
+  const review = record(value, "GitHub pull-request review");
+  const id = review.id;
+  if (!Number.isInteger(id) || (id as number) < 1) {
+    throw new GitHubConnectorError("GitHub review omitted its id");
+  }
+  const url = text(review.html_url, "GitHub review URL");
+  try {
+    new URL(url);
+  } catch (error) {
+    throw new GitHubConnectorError("GitHub review omitted a valid URL", { cause: error });
+  }
+  return {
+    id: id as number,
+    login: normalizeLogin(review.user, "GitHub review user"),
+    state: text(review.state, "GitHub review state").toUpperCase(),
+    commitId: text(review.commit_id, "GitHub review commit id"),
+    submittedAt: text(review.submitted_at, "GitHub review submitted timestamp"),
+    url,
   };
 }
 
@@ -145,7 +171,7 @@ export class GitHubConnector {
     const issue = normalizeIssue(rawIssue);
     const expectedBody = issueBody(value, work);
     if (
-      issue.title !== `[Cutset] ${work.title}`
+      issue.title !== `[ChangeMarshal] ${work.title}`
       || issue.body !== expectedBody
       || issue.state !== "open"
       || issue.assignee !== login
@@ -179,7 +205,7 @@ export class GitHubConnector {
         work,
         login: mappings.get(work.ownerUrn) as string,
         existing: indexed.get(work.workKey),
-        title: `[Cutset] ${work.title}`,
+        title: `[ChangeMarshal] ${work.title}`,
         body: issueBody(value, work),
       }));
       const projections: Projection[] = [];
@@ -220,6 +246,106 @@ export class GitHubConnector {
     }
   }
 
+  private approvalLogins(value: ChangeCase, mappings: ReadonlyMap<string, string>): readonly string[] {
+    return [...new Set(value.approvalRequirements.map((requirement) => {
+      const login = mappings.get(requirement.ownerUrn);
+      if (login === undefined) {
+        throw new GitHubConnectorError(`approval owner has no GitHub mapping: ${requirement.ownerUrn}`);
+      }
+      return login;
+    }))].sort();
+  }
+
+  private async verifyReviewerPermissions(logins: readonly string[]): Promise<void> {
+    for (const login of logins) {
+      const response = record(
+        await this.api.get(`${this.repoPath}/collaborators/${encodeURIComponent(login)}/permission`),
+        "GitHub reviewer permission",
+      );
+      const permission = text(response.permission, "GitHub reviewer permission");
+      if (!new Set(["admin", "maintain", "write"]).has(permission)) {
+        throw new GitHubConnectorError(`mapped approval owner lacks write permission: ${login}`);
+      }
+    }
+  }
+
+  private async currentReviews(value: ChangeCase) {
+    return (await this.api.paginate(`${this.repoPath}/pulls/${this.pullNumber}/reviews?per_page=100`))
+      .map(normalizeReview)
+      .filter((review) => review.commitId === value.revision.headSha);
+  }
+
+  async syncApprovalRequests(value: ChangeCase): Promise<void> {
+    try {
+      const mappings = await this.preflightCase(value);
+      const logins = this.approvalLogins(value, mappings);
+      await this.verifyReviewerPermissions(logins);
+      const reviewed = new Set((await this.currentReviews(value))
+        .filter((review) => new Set(["APPROVED", "CHANGES_REQUESTED"]).has(review.state))
+        .map((review) => review.login));
+      const requestedResponse = record(
+        await this.api.get(`${this.repoPath}/pulls/${this.pullNumber}/requested_reviewers`),
+        "GitHub requested reviewers",
+      );
+      const requested = new Set(array(requestedResponse.users, "GitHub requested reviewer users")
+        .map((user) => normalizeLogin(user, "GitHub requested reviewer")));
+      const missing = logins.filter((login) => !requested.has(login) && !reviewed.has(login));
+      if (missing.length > 0) {
+        await this.api.post(`${this.repoPath}/pulls/${this.pullNumber}/requested_reviewers`, {
+          reviewers: missing,
+        });
+      }
+      const reread = record(
+        await this.api.get(`${this.repoPath}/pulls/${this.pullNumber}/requested_reviewers`),
+        "GitHub requested reviewers reread",
+      );
+      const verified = new Set(array(reread.users, "GitHub requested reviewer users reread")
+        .map((user) => normalizeLogin(user, "GitHub requested reviewer reread")));
+      const unresolved = logins.filter((login) => !verified.has(login) && !reviewed.has(login));
+      if (unresolved.length > 0) {
+        throw new GitHubConnectorError(`GitHub review request reread omitted governed reviewers: ${unresolved.join(", ")}`);
+      }
+    } catch (error) {
+      throw connectorError(error);
+    }
+  }
+
+  async reconcileApprovals(value: ChangeCase): Promise<ChangeCase["approvalDecisions"]> {
+    try {
+      const mappings = await this.preflightCase(value);
+      const logins = this.approvalLogins(value, mappings);
+      await this.verifyReviewerPermissions(logins);
+      const latest = new Map<string, ReturnType<typeof normalizeReview>>();
+      for (const review of await this.currentReviews(value)) {
+        if (!logins.includes(review.login) || !new Set(["APPROVED", "CHANGES_REQUESTED", "DISMISSED"]).has(review.state)) {
+          continue;
+        }
+        const previous = latest.get(review.login);
+        if (previous === undefined || review.id > previous.id) latest.set(review.login, review);
+      }
+      return value.approvalRequirements.flatMap((requirement) => {
+        const login = mappings.get(requirement.ownerUrn) as string;
+        const review = latest.get(login);
+        if (review === undefined || review.state === "DISMISSED") return [];
+        return [{
+          requirementKey: requirement.requirementKey,
+          revisionKey: value.revision.revisionKey,
+          headSha: value.revision.headSha,
+          role: requirement.role,
+          ownerUrn: requirement.ownerUrn,
+          actorLogin: login,
+          verdict: review.state === "APPROVED" ? "approve" as const : "reject" as const,
+          decidedAt: new Date(review.submittedAt).toISOString(),
+          source: "github" as const,
+          externalId: String(review.id),
+          url: review.url,
+        }];
+      }).sort((left, right) => left.actorLogin.localeCompare(right.actorLogin));
+    } catch (error) {
+      throw connectorError(error);
+    }
+  }
+
   async verifyActor(expectedLogin: string): Promise<Readonly<{ login: string; permission: string }>> {
     try {
       const user = record(await this.api.get("/user"), "GitHub user");
@@ -244,8 +370,8 @@ export class GitHubConnector {
       const state = allowed ? "success" : "failure";
       const body = {
         state,
-        context: "cutset/governed-change",
-        description: allowed ? "Cutset admission requirements satisfied" : "Cutset admission requirements are incomplete",
+        context: "changemarshal/governed-change",
+        description: allowed ? "ChangeMarshal admission requirements satisfied" : "ChangeMarshal admission requirements are incomplete",
         target_url: targetUrl,
       };
       await this.api.post(`${this.repoPath}/statuses/${encodeURIComponent(headSha)}`, body);

@@ -3,7 +3,6 @@ import { z } from "zod";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
-import type { ApprovalInput, VerifiedActorSource } from "../actions/approval";
 import type { CasesService, StatusSurface, WorkSurface } from "../application/cases";
 import type { ChangeCase, ValidationReceipt } from "../domain/case";
 import { resolveRevision } from "../git/repository";
@@ -17,7 +16,6 @@ export interface CaseApplication {
   show(caseKey: string): Promise<ChangeCase>;
   syncWork(caseKey: string, surface: WorkSurface, at: string): Promise<ChangeCase>;
   reconcileWork(caseKey: string, surface: WorkSurface, at: string): Promise<ChangeCase>;
-  approve(caseKey: string, input: ApprovalInput, actors: VerifiedActorSource): Promise<ChangeCase>;
   updateOwnerMappings(caseKey: string, mappings: readonly [string, string][], at: string): Promise<ChangeCase>;
   recordReceipt(caseKey: string, receipt: ValidationReceipt, at: string): Promise<ChangeCase>;
   decide(caseKey: string, surface: StatusSurface, targetUrl: string, currentHeadSha: string, at: string): Promise<ChangeCase>;
@@ -25,16 +23,11 @@ export interface CaseApplication {
 
 export interface ServerDependencies {
   readonly application: CaseApplication | CasesService;
-  readonly github: () => WorkSurface & StatusSurface & VerifiedActorSource;
+  readonly github: () => WorkSurface & StatusSurface;
   readonly repoRoot?: string;
 }
 
 const caseParams = z.object({ caseKey: z.string().regex(/^[a-f0-9]{24}$/) }).strict();
-const approvalBody = z.object({
-  requirementKey: z.string().regex(/^[a-f0-9]{24}$/),
-  verdict: z.enum(["approve", "reject"]),
-  currentHeadSha: z.string().min(1),
-}).strict();
 const mappingsBody = z.object({
   mappings: z.array(z.tuple([z.string().startsWith("urn:li:"), z.string().regex(/^[A-Za-z0-9-]+$/)])),
 }).strict();
@@ -54,7 +47,7 @@ export function createServer(dependencies: ServerDependencies): FastifyInstance 
     const message = error instanceof Error ? error.message : "unknown server error";
     void reply.status(status).send({ error: name, message });
   });
-  server.get("/api/health", async () => ({ ok: true, service: "cutset" }));
+  server.get("/api/health", async () => ({ ok: true, service: "changemarshal" }));
   server.get("/api/cases", async () => await dependencies.application.list());
   server.get("/api/cases/:caseKey", async (request) => {
     const { caseKey } = caseParams.parse(request.params);
@@ -67,14 +60,6 @@ export function createServer(dependencies: ServerDependencies): FastifyInstance 
   server.post("/api/cases/:caseKey/reconcile", async (request) => {
     const { caseKey } = caseParams.parse(request.params);
     return await dependencies.application.reconcileWork(caseKey, dependencies.github(), new Date().toISOString());
-  });
-  server.post("/api/cases/:caseKey/approve", async (request) => {
-    const { caseKey } = caseParams.parse(request.params);
-    const body = approvalBody.parse(request.body);
-    return await dependencies.application.approve(caseKey, {
-      ...body,
-      decidedAt: new Date().toISOString(),
-    }, dependencies.github());
   });
   server.post("/api/cases/:caseKey/owners", async (request) => {
     const { caseKey } = caseParams.parse(request.params);

@@ -23,7 +23,7 @@ describe("coordination API", () => {
     const application: CaseApplication = {
       list: async () => [value], show: async () => value,
       syncWork: async () => value, reconcileWork: async () => value,
-      approve: async () => value, decide: async () => value,
+      decide: async () => value,
       updateOwnerMappings: async () => value,
       recordReceipt: async () => value,
     };
@@ -31,37 +31,36 @@ describe("coordination API", () => {
 
     const index = await server.inject({ method: "GET", url: "/api/cases" });
     const detail = await server.inject({ method: "GET", url: `/api/cases/${value.caseKey}` });
+    const health = await server.inject({ method: "GET", url: "/api/health" });
 
     expect(index.statusCode).toBe(200);
     expect(index.json()).toEqual([value]);
     expect(detail.json()).toEqual(value);
+    expect(health.json()).toEqual({ ok: true, service: "changemarshal" });
     expect(`${index.body}${detail.body}`).not.toContain("must-not-leak");
     await server.close();
   });
 
-  it("verifies approvals through the server-owned GitHub connector and rejects client actor claims", async () => {
+  it("reconciles GitHub reviews through the server-owned connector and exposes no direct approval route", async () => {
     const value = currentCase();
     let connectorReceived: unknown;
     const application: CaseApplication = {
       list: async () => [value], show: async () => value,
-      syncWork: async () => value, reconcileWork: async () => value,
-      approve: async (_key, _input, connector) => { connectorReceived = connector; return value; },
+      syncWork: async () => value,
+      reconcileWork: async (_key, connector) => { connectorReceived = connector; return value; },
       decide: async () => value, updateOwnerMappings: async () => value,
       recordReceipt: async () => value,
     };
-    const connector = { verifyActor: async () => ({ login: "verified", permission: "write" }) };
+    const connector = { reconcileApprovals: async () => [] };
     const server = createServer({ application, github: () => connector as never });
-    const requirement = value.approvalRequirements[0]!;
-    const accepted = await server.inject({ method: "POST", url: `/api/cases/${value.caseKey}/approve`, payload: {
-      requirementKey: requirement.requirementKey, verdict: "approve", currentHeadSha: "head",
-    } });
-    const rejected = await server.inject({ method: "POST", url: `/api/cases/${value.caseKey}/approve`, payload: {
-      requirementKey: requirement.requirementKey, verdict: "approve", currentHeadSha: "head", actorLogin: "claimed",
+    const reconciled = await server.inject({ method: "POST", url: `/api/cases/${value.caseKey}/reconcile`, payload: {} });
+    const directApproval = await server.inject({ method: "POST", url: `/api/cases/${value.caseKey}/approve`, payload: {
+      requirementKey: value.approvalRequirements[0]!.requirementKey,
     } });
 
-    expect(accepted.statusCode).toBe(200);
+    expect(reconciled.statusCode).toBe(200);
     expect(connectorReceived).toBe(connector);
-    expect(rejected.statusCode).toBe(400);
+    expect(directApproval.statusCode).toBe(404);
     await server.close();
   });
 });

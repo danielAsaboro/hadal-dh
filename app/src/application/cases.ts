@@ -7,11 +7,6 @@ import type {
 import { ChangeCaseSchema } from "../domain/case";
 import { compileCase } from "../domain/compile-case";
 import { evaluateCase } from "../domain/policy";
-import {
-  recordApproval,
-  type ApprovalInput,
-  type VerifiedActorSource,
-} from "../actions/approval";
 import { detectColumnRename } from "../git/dbt-change";
 import { readDiff, resolveRevision } from "../git/repository";
 import type { CaseReplica } from "./replica";
@@ -30,6 +25,8 @@ export interface CaseStore {
 export interface WorkSurface {
   syncWork(value: ChangeCase, verifiedAt: string): Promise<ChangeCase["externalProjections"]>;
   reconcileWork(value: ChangeCase, verifiedAt: string): Promise<ChangeCase["externalProjections"]>;
+  syncApprovalRequests(value: ChangeCase): Promise<void>;
+  reconcileApprovals(value: ChangeCase): Promise<ChangeCase["approvalDecisions"]>;
 }
 
 export interface StatusSurface {
@@ -140,6 +137,7 @@ export class CasesService {
         throw new CasesServiceError("complete DataHub evidence is required before external work");
       }
       const projections = await surface.syncWork(current, at);
+      await surface.syncApprovalRequests(current);
       return await this.persist(unverified({ ...current, externalProjections: projections }, at), current.revision.headSha, at);
     } catch (error) {
       if (error instanceof CasesServiceError) throw error;
@@ -151,7 +149,12 @@ export class CasesService {
     try {
       const current = await this.load(caseKey);
       const projections = await surface.reconcileWork(current, at);
-      return await this.persist(unverified({ ...current, externalProjections: projections }, at), current.revision.headSha, at);
+      const decisions = await surface.reconcileApprovals(current);
+      return await this.persist(unverified({
+        ...current,
+        externalProjections: projections,
+        approvalDecisions: decisions,
+      }, at), current.revision.headSha, at);
     } catch (error) {
       throw new CasesServiceError("could not reconcile external work", { cause: error });
     }
@@ -182,20 +185,6 @@ export class CasesService {
       receipt,
     ].sort((left, right) => left.workKey.localeCompare(right.workKey));
     return await this.persist(unverified({ ...current, validationReceipts: receipts }, at), current.revision.headSha, at);
-  }
-
-  async approve(
-    caseKey: string,
-    input: ApprovalInput,
-    actors: VerifiedActorSource,
-  ): Promise<ChangeCase> {
-    try {
-      const current = await this.load(caseKey);
-      const approved = await recordApproval(current, input, actors);
-      return await this.persist(approved, input.currentHeadSha, input.decidedAt);
-    } catch (error) {
-      throw new CasesServiceError("could not record governed approval", { cause: error });
-    }
   }
 
   async decide(

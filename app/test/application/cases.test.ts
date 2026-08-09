@@ -59,10 +59,10 @@ class VerifiedMemoryStore implements CaseStore {
 }
 
 async function gitRepository(): Promise<Readonly<{ root: string; base: string; head: string }>> {
-  const root = await mkdtemp(join(tmpdir(), "cutset-cases-"));
+  const root = await mkdtemp(join(tmpdir(), "changemarshal-cases-"));
   await execFile("git", ["init", "-q", root]);
-  await execFile("git", ["-C", root, "config", "user.email", "cutset@example.com"]);
-  await execFile("git", ["-C", root, "config", "user.name", "Cutset Tests"]);
+  await execFile("git", ["-C", root, "config", "user.email", "changemarshal@example.com"]);
+  await execFile("git", ["-C", root, "config", "user.name", "ChangeMarshal Tests"]);
   const path = join(root, "models.yml");
   await writeFile(path, "version: 2\nmodels:\n  - name: customers\n    columns:\n      - name: email\n", "utf8");
   await execFile("git", ["-C", root, "add", "models.yml"]);
@@ -79,7 +79,7 @@ describe("resumable case services", () => {
   it("plans from a real Git diff, persists policy, and writes a verified replica", async () => {
     const repo = await gitRepository();
     const store = new VerifiedMemoryStore();
-    const replicaPath = join(repo.root, ".cutset", "case.json");
+    const replicaPath = join(repo.root, ".changemarshal", "case.json");
     const service = new CasesService(new CapturedEvidence(evidence()), store, new AtomicCaseReplica(replicaPath));
 
     const value = await service.plan({
@@ -135,10 +135,55 @@ describe("resumable case services", () => {
     const surface: WorkSurface = {
       syncWork: async () => { calls += 1; throw new Error("partial remote failure"); },
       reconcileWork: async () => [],
+      syncApprovalRequests: async () => { calls += 1; },
+      reconcileApprovals: async () => [],
     };
     await expect(service.syncWork(value.caseKey, surface, "2026-08-09T10:05:00.000Z"))
       .rejects.toBeInstanceOf(CasesServiceError);
     expect(calls).toBe(0);
     expect(store.values.get(value.caseKey)?.externalProjections).toEqual([]);
+  });
+
+  it("requests reviews during synchronization and persists only reconciled GitHub reviews", async () => {
+    const repo = await gitRepository();
+    const store = new VerifiedMemoryStore();
+    const service = new CasesService(new CapturedEvidence(evidence()), store);
+    let value = await service.plan({
+      repoRoot: repo.root, repository: "acme/warehouse", baseRef: repo.base, headRef: repo.head,
+      maxHops: 3, observedAt: "2026-08-09T10:00:00.000Z",
+    });
+    value = await service.updateOwnerMappings(
+      value.caseKey,
+      [["urn:li:corpuser:producer", "producer-gh"]],
+      "2026-08-09T10:01:00.000Z",
+    );
+    const requirement = value.approvalRequirements[0]!;
+    let requests = 0;
+    const surface: WorkSurface = {
+      syncWork: async () => [],
+      reconcileWork: async () => [],
+      syncApprovalRequests: async () => { requests += 1; },
+      reconcileApprovals: async () => [{
+        requirementKey: requirement.requirementKey,
+        revisionKey: value.revision.revisionKey,
+        headSha: value.revision.headSha,
+        role: requirement.role,
+        ownerUrn: requirement.ownerUrn,
+        actorLogin: "producer-gh",
+        verdict: "approve",
+        decidedAt: "2026-08-09T10:03:00.000Z",
+        source: "github",
+        externalId: "44",
+        url: "https://github.com/acme/warehouse/pull/7#pullrequestreview-44",
+      }],
+    };
+
+    await service.syncWork(value.caseKey, surface, "2026-08-09T10:02:00.000Z");
+    const reconciled = await service.reconcileWork(value.caseKey, surface, "2026-08-09T10:04:00.000Z");
+
+    expect(requests).toBe(1);
+    expect(reconciled.approvalDecisions).toEqual([
+      expect.objectContaining({ externalId: "44", actorLogin: "producer-gh", verdict: "approve" }),
+    ]);
   });
 });

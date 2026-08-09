@@ -3,6 +3,7 @@ import type { ChangeCase } from "../domain/case";
 export interface RemediationArtifact {
   readonly relativePath: string;
   readonly content: string;
+  readonly legacy?: Readonly<{ relativePath: string; content: string }>;
 }
 
 export class RemediationGenerationError extends Error {
@@ -35,7 +36,7 @@ export function generateCompatibilityMigration(value: ChangeCase): readonly Reme
     assertion.column === oldName && assertion.type.toUpperCase().includes("NOT_NULL"));
   const yamlTests = hasNotNull ? "\n        tests:\n          - not_null" : "";
   const sql = [
-    `-- Cutset case ${value.caseKey}; revision ${value.revision.revisionKey}`,
+    `-- ChangeMarshal case ${value.caseKey}; revision ${value.revision.revisionKey}`,
     `-- Compatibility view for ${value.evidence.source.urn}`,
     "SELECT",
     "  source.* ,",
@@ -48,7 +49,7 @@ export function generateCompatibilityMigration(value: ChangeCase): readonly Reme
     "models:",
     `  - name: ${model}_compatibility`,
     "    description: >-",
-    `      Compatibility contract for Cutset case ${value.caseKey} at revision ${value.revision.revisionKey}.`,
+    `      Compatibility contract for ChangeMarshal case ${value.caseKey} at revision ${value.revision.revisionKey}.`,
     "    columns:",
     `      - name: ${oldName}${yamlTests}`,
     "        description: >-",
@@ -56,7 +57,21 @@ export function generateCompatibilityMigration(value: ChangeCase): readonly Reme
     "",
   ].join("\n");
   return [
-    { relativePath: `.cutset/remediation/${model}_compatibility.sql`, content: sql },
-    { relativePath: `.cutset/remediation/${model}_compatibility.yml`, content: yaml },
+    {
+      relativePath: `.changemarshal/remediation/${model}_compatibility.sql`,
+      content: sql,
+      legacy: {
+        relativePath: `.cutset/remediation/${model}_compatibility.sql`,
+        content: sql.replace("ChangeMarshal case", "Cutset case"),
+      },
+    },
+    {
+      relativePath: `.changemarshal/remediation/${model}_compatibility.yml`,
+      content: yaml,
+      legacy: {
+        relativePath: `.cutset/remediation/${model}_compatibility.yml`,
+        content: yaml.replace("ChangeMarshal case", "Cutset case"),
+      },
+    },
   ];
 }

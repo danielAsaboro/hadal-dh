@@ -1,4 +1,9 @@
-# Verified live run
+# Verified pre-rename live run
+
+This immutable proof predates the ChangeMarshal rename. The `cutset` command,
+paths, tag, and graph URNs below are retained verbatim to document backward
+compatibility; current runs use `changemarshal`, `.changemarshal`, and
+`changemarshal-at-risk`.
 
 This transcript was produced on 2026-08-04 against the official DataHub `v1.6.0`
 Docker quickstart on ARM64. The graph was created with

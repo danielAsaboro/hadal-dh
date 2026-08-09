@@ -1,4 +1,4 @@
-name: Cutset governed change plan
+name: ChangeMarshal governed change plan
 
 on:
   pull_request_target:
@@ -15,12 +15,12 @@ jobs:
     runs-on: ubuntu-latest
     environment: datahub-review
     steps:
-      - name: Check out trusted Cutset engine
+      - name: Check out trusted ChangeMarshal engine
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.base.sha }}
           fetch-depth: 0
-          path: cutset-engine
+          path: change-marshal-engine
 
       - name: Check out untrusted candidate as Git data only
         uses: actions/checkout@v4
@@ -38,29 +38,29 @@ jobs:
         run: >-
           git -C candidate fetch --no-tags
           "https://github.com/${BASE_REPOSITORY}.git"
-          "${BASE_SHA}:refs/cutset/base"
+          "${BASE_SHA}:refs/changemarshal/base"
 
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
           cache: npm
-          cache-dependency-path: cutset-engine/package-lock.json
+          cache-dependency-path: change-marshal-engine/package-lock.json
 
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
 
       - name: Install trusted engine and official DataHub MCP server
-        working-directory: cutset-engine
+        working-directory: change-marshal-engine
         run: |
           npm ci
           python -m venv .mcp-venv
           .mcp-venv/bin/pip install 'git+https://github.com/acryldata/mcp-server-datahub.git@v0.6.0'
 
       - name: Compile and persist governed case
-        working-directory: cutset-engine
+        working-directory: change-marshal-engine
         env:
-          CUTSET_DATAHUB_MCP_COMMAND: ${{ github.workspace }}/cutset-engine/.mcp-venv/bin/mcp-server-datahub
+          CHANGEMARSHAL_DATAHUB_MCP_COMMAND: ${{ github.workspace }}/change-marshal-engine/.mcp-venv/bin/mcp-server-datahub
           DATAHUB_GMS_URL: ${{ secrets.DATAHUB_GMS_URL }}
           DATAHUB_GMS_TOKEN: ${{ secrets.DATAHUB_GMS_TOKEN }}
           TOOLS_IS_MUTATION_ENABLED: "true"
@@ -68,29 +68,29 @@ jobs:
           SAVE_DOCUMENT_TOOL_ENABLED: "true"
           SAVE_DOCUMENT_RESTRICT_UPDATES: "false"
         run: |
-          npm run cli -- case plan \
+          npm run changemarshal -- case plan \
             --repo "${{ github.workspace }}/candidate" \
             --repository "${{ github.repository }}" \
             --base "${{ github.event.pull_request.base.sha }}" \
             --head "${{ github.event.pull_request.head.sha }}" \
-            --output cutset-output/case.json
+            --output change-marshal-output/case.json
 
       - name: Publish case summary
         if: always()
-        working-directory: cutset-engine
+        working-directory: change-marshal-engine
         run: |
-          if [[ -f cutset-output/case.json ]]; then
-            jq -r '"## Cutset\n\n- State: `\(.state)`\n- Case: `\(.caseKey)`\n- Revision: `\(.revision.revisionKey)`\n- Blockers: \(.admission.blockers | length)"' cutset-output/case.json >> "$GITHUB_STEP_SUMMARY"
+          if [[ -f change-marshal-output/case.json ]]; then
+            jq -r '"## ChangeMarshal\n\n- State: `\(.state)`\n- Case: `\(.caseKey)`\n- Revision: `\(.revision.revisionKey)`\n- Blockers: \(.admission.blockers | length)"' change-marshal-output/case.json >> "$GITHUB_STEP_SUMMARY"
           fi
 
       - name: Upload canonical case
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: cutset-change-case
-          path: cutset-engine/cutset-output/case.json
+          name: change-marshal-change-case
+          path: change-marshal-engine/change-marshal-output/case.json
           if-no-files-found: error
 
       - name: Fail closed until coordination is complete
-        working-directory: cutset-engine
-        run: jq -e '.dataHub.verified == true and .admission.allowed == true' cutset-output/case.json
+        working-directory: change-marshal-engine
+        run: jq -e '.dataHub.verified == true and .admission.allowed == true' change-marshal-output/case.json

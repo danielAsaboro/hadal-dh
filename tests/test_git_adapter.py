@@ -30,8 +30,8 @@ def _initialize_repo(tmp_path: Path) -> Path:
     repo = tmp_path / "warehouse"
     repo.mkdir()
     _git(repo, "init")
-    _git(repo, "config", "user.name", "Cutset Test")
-    _git(repo, "config", "user.email", "cutset@example.invalid")
+    _git(repo, "config", "user.name", "ChangeMarshal Test")
+    _git(repo, "config", "user.email", "changemarshal@example.invalid")
     models = repo / "models"
     models.mkdir()
     schema = models / "customers.yml"

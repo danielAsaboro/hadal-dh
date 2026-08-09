@@ -24,6 +24,13 @@ describe("case identities", () => {
     );
   });
 
+  it("keeps case identity stable across the cutset to change-marshal repository rename", () => {
+    expect(caseKey("owner/change-marshal", sourceUrn, change))
+      .toBe(caseKey("owner/cutset", sourceUrn, change));
+    expect(caseKey("change-marshal/live-demo-typescript", sourceUrn, change))
+      .toBe(caseKey("cutset/live-demo-typescript", sourceUrn, change));
+  });
+
   it("invalidates a revision when the head or evidence changes", () => {
     const logical = caseKey("owner/repo", sourceUrn, change);
     const baseline = revisionKey(logical, "base", "head-a", "evidence-a");

@@ -74,6 +74,14 @@ def _gateway(tag_success: bool = True) -> DataHubGateway:
                     "searchResults": [
                         {
                             "entity": {
+                                "urn": "urn:li:tag:changemarshal-at-risk",
+                                "type": "TAG",
+                                "name": "changemarshal-at-risk",
+                                "properties": {"name": "ChangeMarshal: At Risk"},
+                            }
+                        },
+                        {
+                            "entity": {
                                 "urn": "urn:li:tag:cutset-at-risk",
                                 "type": "TAG",
                                 "name": "cutset-at-risk",
@@ -81,7 +89,7 @@ def _gateway(tag_success: bool = True) -> DataHubGateway:
                             }
                         }
                     ],
-                    "total": 1,
+                    "total": 2,
                 },
             ),
             _Tool("search_documents", {"searchResults": [], "total": 0}),

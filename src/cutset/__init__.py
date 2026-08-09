@@ -1,4 +1,4 @@
-"""Cutset: impact-aware pull-request protection powered by DataHub."""
+"""ChangeMarshal's preserved Python compatibility namespace."""
 
 from cutset.domain import ColumnRename
 

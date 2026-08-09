@@ -16,7 +16,7 @@ def test_demo_entities_encode_dataset_column_and_model_training_lineage() -> Non
     entities = build_demo_entities()
 
     assert [str(entity.urn) for entity in entities] == [
-        "urn:li:tag:cutset-at-risk",
+        "urn:li:tag:changemarshal-at-risk",
         "urn:li:tag:customer-data",
         "urn:li:glossaryNode:cutset-demo",
         "urn:li:glossaryTerm:customer-identity",

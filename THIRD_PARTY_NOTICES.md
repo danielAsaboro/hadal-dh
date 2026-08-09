@@ -2,7 +2,8 @@
 
 ## DataHub Agent Starter
 
-Cutset began from the DataHub Agent Starter by Lakshay Nasa:
+ChangeMarshal began from the DataHub Agent Starter by Lakshay Nasa. The preserved
+Python import namespace remains `cutset` for backward compatibility:
 
 https://github.com/lakshay-nasa/datahub-agent-starter
 

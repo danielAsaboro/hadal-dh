@@ -6,6 +6,7 @@ import {
   DataHubCaseStore,
   DataHubCaseStoreError,
 } from "../../src/datahub/case-store";
+import { caseDocumentTitle } from "../../src/domain/case-document";
 import type { DataHubToolCaller } from "../../src/datahub/evidence";
 
 const source = "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.customers,PROD)";
@@ -108,6 +109,42 @@ describe("DataHub case persistence", () => {
     expect(service.saves).toHaveLength(2);
   });
 
+  it("finds and migrates a legacy Cutset document in place", async () => {
+    const service = new CapturedDocumentService();
+    const store = new DataHubCaseStore(service);
+    const value = changeCase();
+    const first = await store.saveAndVerifyCase(value, "2026-08-09T10:05:00.000Z");
+    const existing = service.documents.get(documentUrn)!;
+    service.documents.set(documentUrn, {
+      title: `Cutset change case ${value.caseKey}`,
+      content: existing.content
+        .replace("CHANGEMARSHAL_CASE_GZIP_BASE64_BEGIN", "CUTSET_CASE_GZIP_BASE64_BEGIN")
+        .replace("CHANGEMARSHAL_CASE_GZIP_BASE64_END", "CUTSET_CASE_GZIP_BASE64_END"),
+    });
+
+    expect(await store.findCase(value.caseKey)).toBe(documentUrn);
+    const migrated = await store.saveAndVerifyCase(value, "2026-08-09T10:05:00.000Z");
+
+    expect(migrated).toEqual(first);
+    expect(service.documents.size).toBe(1);
+    expect(service.documents.get(documentUrn)?.title).toBe(caseDocumentTitle(value.caseKey));
+    expect(service.documents.get(documentUrn)?.content).toContain("CHANGEMARSHAL_CASE_GZIP_BASE64_BEGIN");
+  });
+
+  it("fails closed when canonical and legacy titles point to different documents", async () => {
+    const service = new CapturedDocumentService();
+    const value = changeCase();
+    service.documents.set("urn:li:document:canonical", {
+      title: caseDocumentTitle(value.caseKey), content: "canonical",
+    });
+    service.documents.set("urn:li:document:legacy", {
+      title: `Cutset change case ${value.caseKey}`, content: "legacy",
+    });
+
+    await expect(new DataHubCaseStore(service).findCase(value.caseKey))
+      .rejects.toThrow(/multiple.*documents/i);
+  });
+
   it("rejects incomplete search and duplicate exact documents before mutation", async () => {
     const value = changeCase();
     const incomplete: DataHubToolCaller = {
@@ -117,7 +154,7 @@ describe("DataHub case persistence", () => {
       .rejects.toThrow(/search.*incomplete/i);
 
     const duplicate = new CapturedDocumentService();
-    const title = `Cutset change case ${value.caseKey}`;
+    const title = caseDocumentTitle(value.caseKey);
     duplicate.documents.set("urn:li:document:first", { title, content: "first" });
     duplicate.documents.set("urn:li:document:second", { title, content: "second" });
     await expect(new DataHubCaseStore(duplicate).saveAndVerifyCase(value, "2026-08-09T10:05:00.000Z"))

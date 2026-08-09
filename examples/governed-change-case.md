@@ -1,4 +1,4 @@
-# Real governed change case
+# Real ChangeMarshal governed change case
 
 This sanitized sample was produced by the TypeScript CLI on 2026-08-09 from a real Git repository, DataHub OSS v1.6.0, and official DataHub MCP server v0.6.0. It is intentionally blocked because the configured GitHub credential was invalid; no task or approval success is simulated.
 
@@ -35,7 +35,7 @@ The connected OSS MCP server did not advertise `get_dataset_assertions`; the cas
 | `343169f7aaf5bf9824dba496` | consumer remediation | `analytics.customer_features` | exit 0, artifact hashes recorded |
 | `b22967ac15a592da4eea5641` | ML validation | `churn_prediction_v2` | exit 0, artifact hashes recorded |
 
-Producer and consumer approval requirements were derived separately. All three items map `urn:li:corpuser:cutset-demo` to the explicitly configured GitHub login `danielAsaboro`.
+Producer and consumer approval requirements were derived separately. All three items map the preserved legacy graph identity `urn:li:corpuser:cutset-demo` to the explicitly configured GitHub login `danielAsaboro`. That existing URN is evidence, not current product branding, and is deliberately not rewritten.
 
 ## Current deterministic decision
 

@@ -18,8 +18,8 @@ def _repo_with_rename(tmp_path: Path) -> Path:
     repo = tmp_path / "warehouse"
     repo.mkdir()
     _git(repo, "init")
-    _git(repo, "config", "user.name", "Cutset Test")
-    _git(repo, "config", "user.email", "cutset@example.invalid")
+    _git(repo, "config", "user.name", "ChangeMarshal Test")
+    _git(repo, "config", "user.email", "changemarshal@example.invalid")
     schema = repo / "customers.yml"
     schema.write_text("models:\n  - name: customers\n    columns:\n      - name: email\n")
     _git(repo, "add", ".")

@@ -4,7 +4,7 @@ from pathlib import Path
 
 
 class GitContextError(RuntimeError):
-    """Raised when Cutset cannot establish trustworthy Git context."""
+    """Raised when ChangeMarshal cannot establish trustworthy Git context."""
 
 
 @dataclass(frozen=True, slots=True)

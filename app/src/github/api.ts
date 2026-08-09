@@ -51,7 +51,7 @@ export class GitHubApi {
         Accept: "application/vnd.github+json",
         Authorization: `Bearer ${this.token}`,
         "X-GitHub-Api-Version": "2022-11-28",
-        "User-Agent": "cutset-governed-change",
+        "User-Agent": "changemarshal-governed-change",
         ...(options.body === undefined ? {} : { "Content-Type": "application/json" }),
       },
       ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),

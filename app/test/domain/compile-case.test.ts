@@ -94,7 +94,7 @@ describe("case compilation", () => {
       ownerMappings: [[producer, "producer-gh"]] as Array<[string, string]>,
       dataHub: {
         verified: true,
-        documentUrn: "urn:li:document:cutset",
+        documentUrn: "urn:li:document:changemarshal",
         verifiedAt: "2026-08-09T09:10:00.000Z",
       },
     };

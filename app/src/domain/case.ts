@@ -174,9 +174,13 @@ const ApprovalDecisionSchema = z
     verdict: z.enum([ApprovalVerdict.Approve, ApprovalVerdict.Reject]),
     decidedAt: isoTimestamp,
     source: z.literal("github"),
+    externalId: nonEmpty.optional(),
+    url: z.string().url().optional(),
   })
   .strict()
   .readonly();
+
+export type ApprovalDecision = z.infer<typeof ApprovalDecisionSchema>;
 
 export const ValidationReceiptSchema = z
   .object({

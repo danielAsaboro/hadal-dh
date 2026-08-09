@@ -6,12 +6,14 @@ import { DataHubEvidenceError } from "../src/datahub/evidence";
 import { GitHubConnectorError } from "../src/github/connector";
 import { ValidationRunnerError } from "../src/validation/runner";
 
-describe("Cutset CLI", () => {
+describe("ChangeMarshal CLI", () => {
   it("exposes the complete resumable case workflow", () => {
-    const cases = buildCli().commands.find((command) => command.name() === "case");
+    const cli = buildCli();
+    expect(cli.name()).toBe("changemarshal");
+    const cases = cli.commands.find((command) => command.name() === "case");
     expect(cases?.commands.map((command) => command.name())).toEqual([
-      "plan", "show", "map-owner", "sync-github", "reconcile", "approve",
-      "generate", "validate", "decide",
+      "plan", "show", "map-owner", "sync-github", "reconcile",
+      "generate", "brief", "validate", "decide",
     ]);
   });
 

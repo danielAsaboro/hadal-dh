@@ -4,7 +4,7 @@ from cutset.domain import ColumnRename
 
 
 class UnsupportedChangeError(ValueError):
-    """Raised when a diff is outside Cutset's supported vertical slice."""
+    """Raised when a diff is outside ChangeMarshal's supported vertical slice."""
 
 
 _NEW_PATH = re.compile(r"^\+\+\+ b/(.+\.(?:ya?ml))$", re.MULTILINE)

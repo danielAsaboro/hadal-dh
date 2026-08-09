@@ -7,7 +7,6 @@ export interface WorkspaceClient {
   getCase(caseKey: string): Promise<ChangeCase>;
   sync(caseKey: string): Promise<ChangeCase>;
   reconcile(caseKey: string): Promise<ChangeCase>;
-  approve(caseKey: string, requirementKey: string, verdict: "approve" | "reject", currentHeadSha: string): Promise<ChangeCase>;
   decide(caseKey: string, targetUrl: string): Promise<ChangeCase>;
 }
 
@@ -31,9 +30,6 @@ export const httpWorkspaceClient: WorkspaceClient = {
   getCase: async (key) => ChangeCaseSchema.parse(await request(`/api/cases/${key}`)),
   sync: async (key) => ChangeCaseSchema.parse(await request(`/api/cases/${key}/sync`, { method: "POST", body: "{}" })),
   reconcile: async (key) => ChangeCaseSchema.parse(await request(`/api/cases/${key}/reconcile`, { method: "POST", body: "{}" })),
-  approve: async (key, requirementKey, verdict, currentHeadSha) => ChangeCaseSchema.parse(await request(`/api/cases/${key}/approve`, {
-    method: "POST", body: JSON.stringify({ requirementKey, verdict, currentHeadSha }),
-  })),
   decide: async (key, targetUrl) => ChangeCaseSchema.parse(await request(`/api/cases/${key}/decide`, {
     method: "POST", body: JSON.stringify({ targetUrl }),
   })),
@@ -93,13 +89,13 @@ export function App({ client = httpWorkspaceClient }: { readonly client?: Worksp
   };
 
   if (loading) return <main className="center-state">Loading governed cases…</main>;
-  if (current === undefined) return <main className="center-state">{error ?? "No governed Cutset cases exist in DataHub."}</main>;
+  if (current === undefined) return <main className="center-state">{error ?? "No governed ChangeMarshal cases exist in DataHub."}</main>;
 
   const blockers = current.admission?.blockers ?? ["ADMISSION_NOT_EVALUATED"];
   return (
     <div className="workspace-shell">
       <aside className="case-rail" aria-label="Change cases">
-        <div className="brand-lockup"><span className="cut-mark">C/</span><span>Cutset</span></div>
+        <div className="brand-lockup"><span className="cut-mark">CM/</span><span>ChangeMarshal</span></div>
         <p className="rail-label">Governed changes</p>
         <nav>
           {cases.map((item) => (
@@ -171,7 +167,9 @@ export function App({ client = httpWorkspaceClient }: { readonly client?: Worksp
               const decision = decisions.get(requirement.requirementKey);
               return <article className="approval-row" key={requirement.requirementKey}>
                 <div><StatePill value={requirement.role} /><h3>{shortUrn(requirement.ownerUrn)}</h3><p>{requirement.affectedUrns.length} governed asset{requirement.affectedUrns.length === 1 ? "" : "s"}</p></div>
-                {decision ? <StatePill value={decision.verdict} /> : <div className="approval-actions"><span>Awaiting</span><button disabled={busy !== undefined} aria-label={`Approve as ${shortUrn(requirement.ownerUrn)}`} onClick={() => void mutate("approve", () => client.approve(current.caseKey, requirement.requirementKey, "approve", current.revision.headSha))}>Approve</button></div>}
+                {decision
+                  ? <div className="approval-actions"><StatePill value={decision.verdict} />{decision.url && <a href={decision.url} target="_blank" rel="noreferrer">Open review ↗</a>}</div>
+                  : <div className="approval-actions"><span>Awaiting</span><small>Submit the requested review in GitHub, then reconcile.</small></div>}
               </article>;
             })}</div>
           </section>

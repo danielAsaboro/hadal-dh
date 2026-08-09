@@ -3,13 +3,24 @@ import { gunzipSync, gzipSync } from "node:zlib";
 import { ChangeCaseSchema, type ChangeCase } from "./case";
 import { caseContentHash, canonicalize, parseCase } from "./serialization";
 
-const begin = "<!-- CUTSET_CASE_GZIP_BASE64_BEGIN -->";
-const end = "<!-- CUTSET_CASE_GZIP_BASE64_END -->";
+const begin = "<!-- CHANGEMARSHAL_CASE_GZIP_BASE64_BEGIN -->";
+const end = "<!-- CHANGEMARSHAL_CASE_GZIP_BASE64_END -->";
+const legacyBegin = "<!-- CUTSET_CASE_GZIP_BASE64_BEGIN -->";
+const legacyEnd = "<!-- CUTSET_CASE_GZIP_BASE64_END -->";
 export const MAX_DATAHUB_DOCUMENT_CHARS = 7_900;
 
 export function caseDocumentTitle(caseKey: string): string {
-  if (!/^[a-f0-9]{24}$/.test(caseKey)) throw new Error("invalid Cutset case key");
+  if (!/^[a-f0-9]{24}$/.test(caseKey)) throw new Error("invalid ChangeMarshal case key");
+  return `ChangeMarshal change case ${caseKey}`;
+}
+
+export function legacyCaseDocumentTitle(caseKey: string): string {
+  if (!/^[a-f0-9]{24}$/.test(caseKey)) throw new Error("invalid legacy Cutset case key");
   return `Cutset change case ${caseKey}`;
+}
+
+export function isCaseDocumentTitle(title: unknown, caseKey: string): boolean {
+  return title === caseDocumentTitle(caseKey) || title === legacyCaseDocumentTitle(caseKey);
 }
 
 export function sealCase(value: ChangeCase): ChangeCase {
@@ -48,14 +59,23 @@ export function renderCaseDocument(value: ChangeCase): string {
 }
 
 export function parseCaseDocument(content: string): ChangeCase {
-  const start = content.indexOf(begin);
-  const finish = content.indexOf(end);
-  if (start < 0 || finish < 0 || start !== content.lastIndexOf(begin) || finish !== content.lastIndexOf(end) || finish <= start) {
-    throw new Error("document omitted one unambiguous Cutset case envelope");
+  const matches = [[begin, end], [legacyBegin, legacyEnd]].flatMap(([opening, closing]) => {
+    const start = content.indexOf(opening as string);
+    const finish = content.indexOf(closing as string);
+    return start >= 0
+      && finish > start
+      && start === content.lastIndexOf(opening as string)
+      && finish === content.lastIndexOf(closing as string)
+      ? [{ opening: opening as string, start, finish }]
+      : [];
+  });
+  if (matches.length !== 1) {
+    throw new Error("document omitted one unambiguous ChangeMarshal or legacy Cutset case envelope");
   }
-  const encoded = content.slice(start + begin.length, finish).trim();
+  const match = matches[0] as { opening: string; start: number; finish: number };
+  const encoded = content.slice(match.start + match.opening.length, match.finish).trim();
   if (!/^[A-Za-z0-9+/]+={0,2}$/.test(encoded) || encoded.length > MAX_DATAHUB_DOCUMENT_CHARS) {
-    throw new Error("document contains an invalid Cutset case envelope");
+    throw new Error("document contains an invalid ChangeMarshal case envelope");
   }
   try {
     const serialized = gunzipSync(Buffer.from(encoded, "base64"), {
@@ -63,6 +83,6 @@ export function parseCaseDocument(content: string): ChangeCase {
     }).toString("utf8");
     return parseCase(serialized);
   } catch (error) {
-    throw new Error("document contains an unreadable Cutset case envelope", { cause: error });
+    throw new Error("document contains an unreadable ChangeMarshal case envelope", { cause: error });
   }
 }

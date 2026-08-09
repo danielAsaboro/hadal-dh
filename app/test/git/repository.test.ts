@@ -14,11 +14,11 @@ function git(repo: string, ...args: string[]): string {
 }
 
 function repositoryWithRename(): string {
-  const repo = mkdtempSync(join(tmpdir(), "cutset-ts-git-"));
+  const repo = mkdtempSync(join(tmpdir(), "changemarshal-ts-git-"));
   repositories.push(repo);
   git(repo, "init");
-  git(repo, "config", "user.name", "Cutset Test");
-  git(repo, "config", "user.email", "cutset@example.invalid");
+  git(repo, "config", "user.name", "ChangeMarshal Test");
+  git(repo, "config", "user.email", "changemarshal@example.invalid");
   writeFileSync(
     join(repo, "customers.yml"),
     "models:\n  - name: customers\n    columns:\n      - name: email\n",
@@ -60,7 +60,7 @@ describe("Git evidence", () => {
   });
 
   it("rejects a directory that is not a Git worktree", async () => {
-    const directory = mkdtempSync(join(tmpdir(), "cutset-ts-not-git-"));
+    const directory = mkdtempSync(join(tmpdir(), "changemarshal-ts-not-git-"));
     repositories.push(directory);
 
     await expect(resolveRevision(directory, "HEAD")).rejects.toThrow(

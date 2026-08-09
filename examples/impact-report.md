@@ -1,4 +1,8 @@
-# Cutset impact review
+# Legacy Cutset impact review
+
+> Immutable pre-rename output retained as migration evidence. Current reports
+> are titled `ChangeMarshal impact review`; the stable analysis key and legacy
+> DataHub identifiers remain readable.
 
 ## Verdict: BLOCK
 

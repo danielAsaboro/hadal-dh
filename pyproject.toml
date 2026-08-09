@@ -3,9 +3,9 @@ requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "cutset"
+name = "changemarshal"
 version = "0.1.0"
-description = "Know what breaks before you merge."
+description = "Govern DataOps and MLOps changes with DataHub graph evidence."
 readme = "README.md"
 requires-python = ">=3.11,<3.14"
 license = "Apache-2.0"
@@ -26,6 +26,7 @@ dev = [
 ]
 
 [project.scripts]
+changemarshal = "cutset.cli:app"
 cutset = "cutset.cli:app"
 
 [tool.setuptools.packages.find]

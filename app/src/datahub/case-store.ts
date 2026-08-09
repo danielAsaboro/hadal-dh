@@ -3,6 +3,8 @@ import {
 } from "../domain/case";
 import {
   caseDocumentTitle,
+  isCaseDocumentTitle,
+  legacyCaseDocumentTitle,
   MAX_DATAHUB_DOCUMENT_CHARS,
   parseCaseDocument,
   renderCaseDocument,
@@ -27,11 +29,11 @@ function storeError(error: unknown): DataHubCaseStoreError {
 export class DataHubCaseStore {
   constructor(private readonly tools: DataHubToolCaller) {}
 
-  async findCase(caseKey: string): Promise<string | undefined> {
+  private async findCaseMatch(caseKey: string): Promise<Readonly<{ urn: string; title: string }> | undefined> {
     try {
-      const title = caseDocumentTitle(caseKey);
+      const titles = new Set([caseDocumentTitle(caseKey), legacyCaseDocumentTitle(caseKey)]);
       const payload = record(await this.tools.callTool("search_documents", {
-        query: `/q "${title}"`,
+        query: `/q "change case ${caseKey}"`,
         num_results: 10,
         offset: 0,
       }), "document search response");
@@ -46,18 +48,23 @@ export class DataHubCaseStore {
       if (start !== 0 || results.length > count || total !== results.length) {
         throw new DataHubCaseStoreError("document search results are incomplete");
       }
-      const exact = new Set<string>();
+      const exact = new Map<string, string>();
       for (const result of results) {
         const entity = record(record(result, "document result").entity, "document entity");
         const entityUrn = urn(entity.urn, "document");
         const info = record(entity.info, "document info");
-        if (info.title === title) exact.add(entityUrn);
+        if (titles.has(String(info.title))) exact.set(entityUrn, String(info.title));
       }
-      if (exact.size > 1) throw new DataHubCaseStoreError("multiple exact Cutset case documents exist");
-      return [...exact][0];
+      if (exact.size > 1) throw new DataHubCaseStoreError("multiple exact ChangeMarshal or legacy Cutset case documents exist");
+      const match = [...exact][0];
+      return match === undefined ? undefined : { urn: match[0], title: match[1] };
     } catch (error) {
       throw storeError(error);
     }
+  }
+
+  async findCase(caseKey: string): Promise<string | undefined> {
+    return (await this.findCaseMatch(caseKey))?.urn;
   }
 
   async listCases(): Promise<readonly ChangeCase[]> {
@@ -67,7 +74,7 @@ export class DataHubCaseStore {
       let total = 0;
       do {
         const payload = record(await this.tools.callTool("search_documents", {
-          query: "/q \"Cutset change case\"",
+          query: "/q \"change case\"",
           num_results: 50,
           offset,
         }), "case index response");
@@ -85,10 +92,15 @@ export class DataHubCaseStore {
         for (const result of results) {
           const entity = record(record(result, "case index result").entity, "case index entity");
           const title = record(entity.info, "case index info").title;
-          const match = typeof title === "string" ? /^Cutset change case ([a-f0-9]{24})$/.exec(title) : null;
+          const match = typeof title === "string"
+            ? /^(?:ChangeMarshal|Cutset) change case ([a-f0-9]{24})$/.exec(title)
+            : null;
           if (match?.[1]) {
-            if (found.has(match[1])) throw new DataHubCaseStoreError(`multiple exact Cutset case documents exist: ${match[1]}`);
-            found.set(match[1], urn(entity.urn, "case document"));
+            const documentUrn = urn(entity.urn, "case document");
+            if (found.has(match[1]) && found.get(match[1]) !== documentUrn) {
+              throw new DataHubCaseStoreError(`multiple exact ChangeMarshal or legacy Cutset case documents exist: ${match[1]}`);
+            }
+            found.set(match[1], documentUrn);
           }
         }
         offset += results.length;
@@ -137,7 +149,7 @@ export class DataHubCaseStore {
       } catch (error) {
         throw new DataHubCaseStoreError("DataHub document reread was truncated or invalid", { cause: error });
       }
-      if (entity.title !== caseDocumentTitle(value.caseKey)) {
+      if (!isCaseDocumentTitle(entity.title, value.caseKey)) {
         throw new DataHubCaseStoreError("DataHub document title does not match its case key");
       }
       return value;
@@ -155,7 +167,7 @@ export class DataHubCaseStore {
       document_type: "Analysis",
       title: caseDocumentTitle(value.caseKey),
       content: renderCaseDocument(value),
-      topics: ["cutset", "governed-change", value.state],
+      topics: ["changemarshal", "governed-change", value.state],
       related_assets: relatedAssets,
     };
     if (existingUrn !== undefined) input.urn = existingUrn;
@@ -186,14 +198,19 @@ export class DataHubCaseStore {
 
   async saveAndVerifyCase(value: ChangeCase, verifiedAt: string): Promise<ChangeCase> {
     try {
-      const existingUrn = await this.findCase(value.caseKey);
+      const existingMatch = await this.findCaseMatch(value.caseKey);
+      const existingUrn = existingMatch?.urn;
       if (existingUrn !== undefined) {
         const existing = await this.loadCase(existingUrn);
         const intended = sealCase({
           ...value,
           dataHub: { verified: true, documentUrn: existingUrn, verifiedAt },
         });
-        if (serializeCase(existing) === serializeCase(intended)) return existing;
+        if (serializeCase(existing) === serializeCase(intended)) {
+          if (existingMatch?.title === caseDocumentTitle(value.caseKey)) return existing;
+          const migratedUrn = await this.saveDocument(intended, existingUrn);
+          return await this.verifyExact(migratedUrn, intended);
+        }
       }
       const safeAdmission = value.admission === undefined
         ? undefined

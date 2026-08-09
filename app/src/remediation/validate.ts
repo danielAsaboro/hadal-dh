@@ -43,7 +43,7 @@ export function validateRemediation(
       const sql = expected.find((artifact) => artifact.relativePath.endsWith(".sql"));
       const yaml = expected.find((artifact) => artifact.relativePath.endsWith(".yml"));
       if (sql === undefined || yaml === undefined) throw new Error("required artifact types are missing");
-      new Parser().astify(sql.content.replace(/\{\{\s*ref\('[^']+'\)\s*\}\}/g, "cutset_source"), { database: "Snowflake" });
+      new Parser().astify(sql.content.replace(/\{\{\s*ref\('[^']+'\)\s*\}\}/g, "changemarshal_source"), { database: "Snowflake" });
       const parsedYaml = parseYaml(yaml.content) as unknown;
       if (typeof parsedYaml !== "object" || parsedYaml === null) throw new Error("dbt YAML is not an object");
     } catch {

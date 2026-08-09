@@ -35,7 +35,7 @@ function caseValue(): ChangeCase {
   };
 }
 
-describe("Cutset coordination workspace", () => {
+describe("ChangeMarshal coordination workspace", () => {
   it("renders governed evidence, work, approvals, blockers, and real projections", async () => {
     const value = caseValue();
     const client: WorkspaceClient = {
@@ -43,18 +43,21 @@ describe("Cutset coordination workspace", () => {
       getCase: async () => value,
       sync: async () => value,
       reconcile: async () => value,
-      approve: async () => value,
       decide: async () => value,
     };
     render(<App client={client} />);
 
     expect(screen.getByText("Loading governed cases…")).not.toBeNull();
     await waitFor(() => expect(screen.getByRole("heading", { name: /customers/i })).not.toBeNull());
+    expect(screen.getByText("ChangeMarshal")).not.toBeNull();
+    expect(screen.queryByText("Cutset")).toBeNull();
     expect(screen.getByLabelText("email → email_address")).not.toBeNull();
     expect(screen.getByText(/OWNER_MAPPING_MISSING/)).not.toBeNull();
     expect(screen.getAllByText("orders").length).toBeGreaterThan(0);
     expect(screen.getByText(/Implement compatible producer migration/)).not.toBeNull();
     expect(screen.getAllByText("Awaiting").length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Submit the requested review in GitHub/i).length).toBeGreaterThan(0);
+    expect(screen.queryByRole("button", { name: /Approve as/i })).toBeNull();
     expect(screen.getByRole("link", { name: /Open GitHub issue/i }).getAttribute("href"))
       .toBe("https://github.com/acme/warehouse/issues/1");
   });

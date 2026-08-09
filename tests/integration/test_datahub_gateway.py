@@ -15,16 +15,16 @@ def _model_name(dataset_urn: str) -> str:
     try:
         dataset_name = dataset_urn.rsplit(",", 2)[-2]
     except IndexError as error:
-        raise AssertionError("CUTSET_INTEGRATION_DATASET must be a dataset URN") from error
+        raise AssertionError("CHANGEMARSHAL_INTEGRATION_DATASET must be a dataset URN") from error
     return dataset_name.rsplit(".", 1)[-1]
 
 
 @pytest.mark.integration
 def test_collects_evidence_from_live_datahub() -> None:
-    dataset_urn = os.getenv("CUTSET_INTEGRATION_DATASET")
+    dataset_urn = os.getenv("CHANGEMARSHAL_INTEGRATION_DATASET")
     if not dataset_urn:
-        pytest.skip("CUTSET_INTEGRATION_DATASET is not configured")
-    old_column = os.getenv("CUTSET_INTEGRATION_COLUMN", "email")
+        pytest.skip("CHANGEMARSHAL_INTEGRATION_DATASET is not configured")
+    old_column = os.getenv("CHANGEMARSHAL_INTEGRATION_COLUMN", "email")
     gateway = DataHubGateway.from_env()
 
     evidence = gateway.collect_evidence(
@@ -62,10 +62,10 @@ def test_collects_evidence_from_live_datahub() -> None:
 
 @pytest.mark.integration
 def test_live_write_back_is_idempotent() -> None:
-    if os.getenv("CUTSET_INTEGRATION_WRITEBACK") != "1":
-        pytest.skip("CUTSET_INTEGRATION_WRITEBACK=1 is required for mutations")
-    dataset_urn = os.environ["CUTSET_INTEGRATION_DATASET"]
-    old_column = os.getenv("CUTSET_INTEGRATION_COLUMN", "email")
+    if os.getenv("CHANGEMARSHAL_INTEGRATION_WRITEBACK") != "1":
+        pytest.skip("CHANGEMARSHAL_INTEGRATION_WRITEBACK=1 is required for mutations")
+    dataset_urn = os.environ["CHANGEMARSHAL_INTEGRATION_DATASET"]
+    old_column = os.getenv("CHANGEMARSHAL_INTEGRATION_COLUMN", "email")
     change = ColumnRename(
         _model_name(dataset_urn),
         old_column,
@@ -84,7 +84,7 @@ def test_live_write_back_is_idempotent() -> None:
         evidence=evidence,
         decision=decide(evidence),
     )
-    tag_name = os.getenv("CUTSET_RISK_TAG", "cutset-at-risk")
+    tag_name = os.getenv("CHANGEMARSHAL_RISK_TAG", "changemarshal-at-risk")
 
     first = gateway.write_back(report, tag_name=tag_name)
     for _ in range(10):

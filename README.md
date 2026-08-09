@@ -1,8 +1,8 @@
-# Cutset
+# ChangeMarshal
 
 > Turn DataHub graph evidence into coordinated, accountable work—and write every decision and outcome back to the graph.
 
-A dbt column rename can cross team boundaries before anyone sees the breakage. Cutset detects the real Git change, resolves the model in DataHub, follows exact column and multi-hop lineage, and compiles one durable change case. That case drives owner-specific GitHub work, SHA-bound approvals, generated compatibility artifacts, executable validation receipts, and a deterministic merge status.
+A dbt column rename can cross team boundaries before anyone sees the breakage. ChangeMarshal detects the real Git change, resolves the model in DataHub, follows exact column and multi-hop lineage, and compiles one durable change case. That case drives owner-specific GitHub work, SHA-bound approvals, generated compatibility artifacts, executable validation receipts, and a deterministic merge status.
 
 DataHub is the governed source of truth. GitHub is an execution surface. An LLM never decides whether a change may merge.
 
@@ -48,14 +48,14 @@ Set the absolute MCP command path and DataHub connection in `.env`. Then:
 
 ```bash
 set -a; source .env; set +a
-npm run cli -- case plan \
+npm run changemarshal -- case plan \
   --repo /path/to/real-dbt-repo \
   --repository owner/repository \
   --base BASE_SHA \
   --head HEAD_SHA
 ```
 
-Continue with `case map-owner`, `sync-github`, `generate`, `validate`, `approve`, `reconcile`, and `decide`. Run `npm run cli -- case --help` for exact arguments. Every integration is explicit; there is no fallback transport or simulated success path.
+Continue with `case map-owner`, `sync-github`, `generate`, `validate`, `reconcile`, and `decide`. `sync-github` creates or updates owner issues and requests the mapped producer and consumer as real pull-request reviewers. After those users submit reviews on the analyzed head SHA, `reconcile` rereads the review IDs, authors, states, commit IDs, URLs, and repository permissions into the canonical case. The optional `case brief` command uses AI SDK 7 with an explicitly configured real OpenAI-compatible model to summarize the already verified plan; its schema rejects invented URNs, omitted work, or the wrong case revision, and its output has no merge authority. Run `npm run changemarshal -- case --help` for exact arguments. Every integration is explicit; there is no fallback transport or simulated success path.
 
 The coordination workspace is served with:
 
@@ -63,6 +63,25 @@ The coordination workspace is served with:
 npm run build
 npm run serve
 ```
+
+## Approval-gated AI SDK 7 agent
+
+`changemarshal agent` runs a real Vercel AI SDK 7 `ToolLoopAgent` against the same deterministic services. Its fixed runtime scope supplies the repository, Git refs, owner mappings, validator argument array, artifact paths, and status URL; the model cannot replace them. Read-only Git/DataHub inspection may run directly. Planning/write-back, owner mapping, GitHub synchronization, remediation writes, validation commands, reconciliation, and status publication all emit AI SDK `user-approval` requests in the interactive terminal before execution.
+
+```bash
+npm run changemarshal -- agent \
+  --repo /path/to/real-dbt-repo \
+  --repository owner/change-marshal \
+  --base BASE_SHA \
+  --head HEAD_SHA \
+  --target-url https://your-host/cases/current \
+  --map urn:li:corpuser:data-owner=github-login \
+  --validation-command-json '["dbt","test","--select","customers+"]' \
+  --artifact .changemarshal/remediation/customers_compatibility.sql \
+             .changemarshal/remediation/customers_compatibility.yml
+```
+
+The terminal uses `y`/`n` for each proposed mutation. Deterministic case policy alone computes merge admission. A live read-only run has been verified with AI SDK 7.0.58, a local Qwen tool-capable model, real Git commits, DataHub OSS, and the official MCP server. The GitHub mutation portion remains credential-gated and must not be treated as live-verified merely because its contract suite passes.
 
 ## Verification
 
@@ -73,6 +92,10 @@ npm run build
 git diff --check
 ```
 
-The preserved Python vertical slice remains available for comparison and is not the primary product path. Live setup, integration gates, and proof boundaries are documented in [docs/verification.md](docs/verification.md); architecture and trust boundaries are in [docs/architecture.md](docs/architecture.md).
+The credential-gated integration suites are `npm run test:integration:datahub` and `npm run test:integration:github`; each skips unless its explicit live gate is enabled and fails closed once enabled. The preserved Python vertical slice remains available for comparison and is not the primary product path.
+
+## Rename compatibility
+
+`changemarshal` and `CHANGEMARSHAL_*` are canonical. The legacy `cutset` npm command and `CUTSET_*` variables remain deterministic migration aliases: equal old/new values are accepted, conflicting values fail, and a legacy-only value emits a migration warning. Exact legacy `.cutset` case and remediation files move to `.changemarshal`; conflicting dual files fail. Existing Cutset DataHub document titles/envelopes and GitHub issue markers are recognized and rewritten in place, preserving their document URNs, issue IDs, case keys, and audit history.
 
 The repository began from DataHub's official Agent Starter; provenance is recorded in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Licensed under Apache 2.0.

@@ -1,3 +1,7 @@
+import { mkdtemp, mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import { describe, expect, it } from "vitest";
 
 import type { ChangeCase, ImpactEvidence } from "../../src/domain/case";
@@ -7,6 +11,7 @@ import {
   RemediationGenerationError,
 } from "../../src/remediation/generate";
 import { validateRemediation } from "../../src/remediation/validate";
+import { writeRemediationArtifacts } from "../../src/remediation/write";
 
 function value(): ChangeCase {
   const source = "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.customers,PROD)";
@@ -33,12 +38,13 @@ describe("grounded compatibility remediation", () => {
     const generated = generateCompatibilityMigration(value());
 
     expect(generated.map((artifact) => artifact.relativePath)).toEqual([
-      ".cutset/remediation/customers_compatibility.sql",
-      ".cutset/remediation/customers_compatibility.yml",
+      ".changemarshal/remediation/customers_compatibility.sql",
+      ".changemarshal/remediation/customers_compatibility.yml",
     ]);
     expect(generated[0]?.content).toContain('"email_address" AS "email"');
     expect(generated[0]?.content).toContain("ref('customers')");
     expect(generated[1]?.content).toContain("not_null");
+    expect(generated[0]?.content).toContain("ChangeMarshal case");
     expect(validateRemediation(value(), generated)).toEqual({ valid: true, errors: [] });
   });
 
@@ -59,7 +65,31 @@ describe("grounded compatibility remediation", () => {
       : artifact);
     expect(validateRemediation(current, altered)).toEqual({
       valid: false,
-      errors: ["artifact content does not match grounded deterministic output: .cutset/remediation/customers_compatibility.sql"],
+      errors: ["artifact content does not match grounded deterministic output: .changemarshal/remediation/customers_compatibility.sql"],
     });
+  });
+
+  it("migrates exact legacy generated artifacts and rejects conflicting dual paths", async () => {
+    const root = await mkdtemp(join(tmpdir(), "changemarshal-remediation-"));
+    const generated = generateCompatibilityMigration(value());
+    for (const artifact of generated) {
+      const legacy = artifact.legacy;
+      expect(legacy).toBeDefined();
+      const target = join(root, legacy!.relativePath);
+      await mkdir(join(target, ".."), { recursive: true });
+      await writeFile(target, legacy!.content, "utf8");
+    }
+
+    await writeRemediationArtifacts(root, generated);
+
+    for (const artifact of generated) {
+      expect(await readFile(join(root, artifact.relativePath), "utf8")).toBe(artifact.content);
+      await expect(stat(join(root, artifact.legacy!.relativePath))).rejects.toMatchObject({ code: "ENOENT" });
+    }
+
+    const first = generated[0]!;
+    await mkdir(join(root, first.legacy!.relativePath, ".."), { recursive: true });
+    await writeFile(join(root, first.legacy!.relativePath), "user changed legacy artifact\n", "utf8");
+    await expect(writeRemediationArtifacts(root, generated)).rejects.toThrow(/conflicting legacy/i);
   });
 });

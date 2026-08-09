@@ -129,7 +129,7 @@ def render_json(report: ImpactReport) -> str:
 def render_markdown(report: ImpactReport) -> str:
     verdict = "BLOCK" if report.decision.blocks_merge else "PASS"
     lines = [
-        "# Cutset impact review",
+        "# ChangeMarshal impact review",
         "",
         f"## Verdict: {verdict}",
         "",

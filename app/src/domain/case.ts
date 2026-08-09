@@ -177,7 +177,7 @@ const ApprovalDecisionSchema = z
   .strict()
   .readonly();
 
-const ValidationReceiptSchema = z
+export const ValidationReceiptSchema = z
   .object({
     receiptKey: stableKey,
     workKey: stableKey,
@@ -194,6 +194,8 @@ const ValidationReceiptSchema = z
   })
   .strict()
   .readonly();
+
+export type ValidationReceipt = z.infer<typeof ValidationReceiptSchema>;
 
 const ExternalProjectionSchema = z
   .object({

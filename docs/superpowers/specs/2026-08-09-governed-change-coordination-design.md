@@ -22,7 +22,7 @@ The verified impact-review command remains operational until the new case flow c
 - Approvals are captured by Cutset only after GitHub verifies the token principal, repository permission, and current pull-request head SHA.
 - GitHub commit status expresses the deterministic admission result. It never substitutes for DataHub write-back.
 - The workspace is a focused local web application backed by verified case artifacts; it does not become a generic work-management product.
-- The existing Python 3.11 package remains the implementation base.
+- All new product code is TypeScript. The existing verified Python 3.11/Agent Context Kit slice remains untouched as a protected fallback until the TypeScript/DataHub MCP replacement passes stronger live proof.
 
 ## Alternatives
 
@@ -46,7 +46,7 @@ Git repository -------->| change analysis      |
                          +----------+-----------+
                                     |
                                     v
-DataHub Agent Context --> evidence compiler
+DataHub MCP Server -----> evidence compiler
                                     |
                                     v
                          +----------------------+
@@ -76,7 +76,7 @@ DataHub Agent Context --> evidence compiler
 
 ### Case domain
 
-`case_domain.py` contains immutable value objects and enums. It has no network or filesystem dependencies.
+`app/src/domain/case.ts` contains readonly TypeScript value objects, discriminated unions, and Zod schemas. It has no network or filesystem dependencies.
 
 Core identities:
 
@@ -100,7 +100,7 @@ Serialization uses a schema-versioned canonical JSON document with sorted object
 
 ### Evidence compiler
 
-The existing impact analysis remains the trusted evidence acquisition path. `case_compiler.py` converts an `ImpactReport` into a case revision without losing original report semantics.
+`app/src/domain/compile-case.ts` compiles verified TypeScript DataHub MCP evidence into a case revision without losing source identities or path semantics. The existing Python impact analysis remains a protected fallback and comparison oracle until replacement proof; new coordination behavior does not extend it.
 
 Compilation rules:
 
@@ -115,7 +115,7 @@ Compilation rules:
 
 ### Case policy
 
-`case_policy.py` recomputes state and admission from facts. Stored state is a cache that must equal recomputation before persistence or remote mutation.
+`app/src/domain/policy.ts` recomputes state and admission from facts. Stored state is a cache that must equal recomputation before persistence or remote mutation.
 
 Admission requires:
 
@@ -132,7 +132,7 @@ Any failure returns a stable blocker code and blocks merge. An LLM result is nev
 
 ### Case persistence
 
-`case_store.py` defines the persistence interface. `DataHubCaseStore` uses Agent Context Kit tools to find, create, update, reread, and verify one stable DataHub Analysis document per case.
+`app/src/datahub/case-store.ts` defines the persistence interface. `DataHubCaseStore` uses the official DataHub MCP Server through the official TypeScript MCP SDK to find, create, update, reread, and verify one stable DataHub Analysis document per case. The configured MCP transport is real; production contains no fixture transport or fallback success path.
 
 The document title includes the exact case key. Its content contains a human summary followed by the canonical JSON envelope. Search matches must be exact and unique. Related assets come only from verified evidence. After saving, Cutset retrieves the document and verifies its URN, case key, revision key, and content hash.
 
@@ -140,7 +140,7 @@ The local `case.json` written beside reports is a verified operational replica a
 
 ### GitHub connector
 
-`github_connector.py` uses the official REST API through `httpx`; there is no fake adapter in production.
+`app/src/github/connector.ts` uses the official REST API through Node's `fetch`; there is no fake adapter in production.
 
 Configuration comes from explicit values and environment secrets:
 
@@ -167,11 +167,11 @@ No GitHub mutation occurs when evidence, ownership, mapping, permissions, or cas
 
 ### Receipts and validators
 
-`receipts.py` records facts produced by commands that actually ran. Each receipt includes command arguments, working tree, exit code, output hash, artifact hashes, start/end timestamps, revision key, and head SHA.
+`app/src/validation/receipts.ts` records facts produced by commands that actually ran. Each receipt includes command arguments, working tree, exit code, output hash, artifact hashes, start/end timestamps, revision key, and head SHA.
 
 Validators execute with argument arrays, never a shell string. The first slice validates:
 
-- generated SQL parses through `sqlglot`;
+- generated SQL parses through the selected TypeScript SQL parser and is also exercised by the configured dbt command;
 - generated dbt YAML parses and names the changed model/column with at least one test;
 - changed-column compatibility maps the verified old field to the proposed new field;
 - configured repository test commands return zero;
@@ -182,7 +182,7 @@ A validator that cannot run is a failed requirement, not a skipped success.
 
 ### Application services and CLI
 
-New application services are resumable:
+TypeScript application services and the Commander CLI are resumable:
 
 - `case plan`: analyze Git/DataHub and create or revise a case;
 - `case sync-github`: project required work and verify projections;
@@ -197,7 +197,7 @@ The existing `review` command remains unchanged until the replacement live proof
 
 ### Coordination workspace
 
-The workspace is server-rendered, accessible, and read-focused for the first complete slice. It displays the verified local replica of a DataHub-persisted case and provides copyable exact CLI actions for mutations that require authenticated operator identity.
+The workspace is a TypeScript React application backed by a Fastify API. It displays the verified local replica of a DataHub-persisted case. State-changing routes never accept a claimed actor: the server verifies the configured GitHub token through `/user`, checks repository permission, reloads the current case and pull-request head, performs the action, persists to DataHub, and returns only the reread verified case.
 
 Views:
 
@@ -272,22 +272,22 @@ Unit and focused contract tests may use immutable response fixtures captured fro
 
 Test layers:
 
-1. pure domain and canonical serialization tests;
+1. pure TypeScript domain and canonical serialization tests with Vitest;
 2. compiler and deterministic policy tests;
-3. real temporary Git repository tests;
-4. HTTP contract tests against an in-process deterministic test server, not a fake production connector;
+3. real temporary Git repository tests using Node child processes;
+4. HTTP boundary tests against an in-process contract server with captured official response shapes, never a production fallback connector;
 5. live DataHub integration tests gated by explicit environment variables;
 6. live GitHub integration tests gated by explicit environment variables and an isolated repository/PR;
 7. one judged end-to-end run using real Git, DataHub, GitHub, generated artifacts, validators, write-back, and an idempotent rerun.
 
-Every production behavior is introduced through a failing test. Live capability claims require a recorded actual run.
+Every production behavior is introduced through a failing Vitest or Playwright test. Live capability claims require a recorded actual run.
 
 ## Migration and compatibility
 
-- `ImpactReport` remains accepted as an input to the new compiler.
-- Existing report JSON and Markdown remain emitted by `review`.
+- Existing Python impact JSON remains readable through an explicit migration importer, but new cases are compiled directly from TypeScript DataHub MCP evidence.
+- Existing Python report JSON and Markdown remain emitted by `review` until replacement proof.
 - The legacy DataHub impact document and risk tag remain available until the new case document has verified parity.
-- No existing module is deleted in the initial implementation.
+- No existing Python module is changed or deleted before TypeScript replacement proof.
 - After live replacement proof, `review` may become a compatibility wrapper around `case plan` and `case decide`.
 
 ## Definition of complete

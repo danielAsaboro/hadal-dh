@@ -1,5 +1,7 @@
 # Governed Change Coordination Implementation Plan
 
+> **Superseded:** The user selected TypeScript immediately before implementation. Do not execute this Python plan. Use `2026-08-09-governed-change-coordination-typescript.md`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build a real, resumable graph-to-work-to-graph Cutset case flow on top of the verified impact analyzer, with GitHub execution, SHA-bound approvals, deterministic validation, DataHub persistence, and a focused coordination workspace.

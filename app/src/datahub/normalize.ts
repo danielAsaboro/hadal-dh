@@ -1,4 +1,6 @@
-import { Parser } from "node-sql-parser";
+import NodeSqlParser from "node-sql-parser";
+
+const { Parser } = NodeSqlParser;
 
 export class DataHubNormalizationError extends Error {
   override readonly name = "DataHubNormalizationError";

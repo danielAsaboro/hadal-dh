@@ -122,15 +122,24 @@ export class DataHubCaseStore {
   async saveAndVerifyCase(value: ChangeCase, verifiedAt: string): Promise<ChangeCase> {
     try {
       const existingUrn = await this.findCase(value.caseKey);
+      const safeAdmission = value.admission === undefined
+        ? undefined
+        : {
+            ...value.admission,
+            allowed: false,
+            blockers: [...new Set([...value.admission.blockers, "DATAHUB_WRITEBACK_UNVERIFIED"])].sort(),
+          };
       const unverified = sealCase({
         ...value,
+        ...(safeAdmission === undefined ? {} : { admission: safeAdmission }),
+        ...(value.admission?.allowed === true ? { state: "approved" } : {}),
         dataHub: { verified: false },
       });
       const documentUrn = await this.saveDocument(unverified, existingUrn);
       await this.verifyExact(documentUrn, unverified);
 
       const verified = sealCase({
-        ...unverified,
+        ...value,
         dataHub: { verified: true, documentUrn, verifiedAt },
       });
       const stableUrn = await this.saveDocument(verified, documentUrn);

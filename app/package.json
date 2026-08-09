@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "tsc --noEmit && vite build",
+    "cli": "tsx src/cli.ts",
     "dev": "vite",
     "test": "vitest run",
     "test:watch": "vitest",

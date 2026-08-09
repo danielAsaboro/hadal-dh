@@ -1,4 +1,4 @@
-import { Parser } from "node-sql-parser";
+import NodeSqlParser from "node-sql-parser";
 import { parse as parseYaml } from "yaml";
 
 import type { ChangeCase } from "../domain/case";
@@ -6,6 +6,8 @@ import {
   generateCompatibilityMigration,
   type RemediationArtifact,
 } from "./generate";
+
+const { Parser } = NodeSqlParser;
 
 export interface RemediationValidation {
   readonly valid: boolean;

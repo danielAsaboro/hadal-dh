@@ -6,6 +6,13 @@ import type { ChangeCase, ImpactEvidence } from "../../src/domain/case";
 import { compileCase } from "../../src/domain/compile-case";
 import { App, type WorkspaceClient } from "../../src/ui/App";
 
+class TestResizeObserver implements ResizeObserver {
+  readonly observe = () => undefined;
+  readonly unobserve = () => undefined;
+  readonly disconnect = () => undefined;
+}
+globalThis.ResizeObserver = TestResizeObserver;
+
 function caseValue(): ChangeCase {
   const source = "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.customers,PROD)";
   const consumer = "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.orders,PROD)";
@@ -49,6 +56,10 @@ describe("ChangeMarshal coordination workspace", () => {
 
     expect(screen.getByText("Loading governed cases…")).not.toBeNull();
     await waitFor(() => expect(screen.getByRole("heading", { name: /customers/i })).not.toBeNull());
+    expect(screen.getByRole("region", { name: /governed execution graph/i })).not.toBeNull();
+    expect(screen.getByText("Git change")).not.toBeNull();
+    expect(screen.getAllByText("Merge decision").length).toBeGreaterThan(0);
+    expect(screen.getByText(/Deterministic policy alone controls admission/i)).not.toBeNull();
     expect(screen.getByText("ChangeMarshal")).not.toBeNull();
     expect(screen.queryByText("Cutset")).toBeNull();
     expect(screen.getByLabelText("email → email_address")).not.toBeNull();

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { ChangeCaseSchema, type ChangeCase } from "../domain/case";
+import { ChangeFlow } from "./ChangeFlow";
 
 export interface WorkspaceClient {
   listCases(): Promise<readonly ChangeCase[]>;
@@ -128,6 +129,8 @@ export function App({ client = httpWorkspaceClient }: { readonly client?: Worksp
             {busy === "decide" ? "Verifying…" : "Evaluate merge"}
           </button>
         </section>
+
+        <ChangeFlow value={current} />
 
         <section className="metric-grid" aria-label="Case summary">
           <article><span>Graph paths</span><strong>{current.evidence.paths.length}</strong></article>

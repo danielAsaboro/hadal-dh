@@ -90,7 +90,7 @@ describe("resumable case services", () => {
     expect(value.change).toMatchObject({ oldName: "email", newName: "email_address" });
     expect(value.dataHub.verified).toBe(true);
     expect(value.admission?.blockers).not.toContain("DATAHUB_WRITEBACK_UNVERIFIED");
-    expect(store.saves).toHaveLength(2);
+    expect(store.saves).toHaveLength(1);
     expect(parseCase(await readFile(replicaPath, "utf8")).caseKey).toBe(value.caseKey);
   });
 

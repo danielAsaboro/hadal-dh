@@ -51,8 +51,11 @@ export function entityType(entity: JsonRecord): string {
   const raw = explicit || urn(entity.urn, "entity").slice("urn:li:".length).split(":", 1)[0]?.toLowerCase();
   const normalized: Readonly<Record<string, string>> = {
     dataset: "dataset",
+    dataflow: "dataFlow",
+    datajob: "dataJob",
     mlfeature: "mlFeature",
     mlmodel: "mlModel",
+    schemafield: "schemaField",
   };
   return normalized[raw ?? ""] ?? text(raw, "entity type");
 }

@@ -8,6 +8,7 @@ import {
 export interface PolicyObservations {
   readonly currentHeadSha: string;
   readonly evaluatedAt: string;
+  readonly twoPhaseWritebackPending?: boolean;
 }
 
 export interface PolicyEvaluation {
@@ -106,7 +107,9 @@ export function evaluateCase(
       blockers.add(`APPROVAL_REJECTED:${requirement.requirementKey}`);
     }
   }
-  if (!value.dataHub.verified) blockers.add("DATAHUB_WRITEBACK_UNVERIFIED");
+  if (!value.dataHub.verified && observations.twoPhaseWritebackPending !== true) {
+    blockers.add("DATAHUB_WRITEBACK_UNVERIFIED");
+  }
 
   const ordered = [...blockers].sort();
   let state: ChangeCase["state"];

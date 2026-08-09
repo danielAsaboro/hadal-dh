@@ -81,6 +81,7 @@ export class DataHubMcpClient implements DataHubToolCaller {
           ...(config.cwd === undefined ? {} : { cwd: config.cwd }),
           stderr: "pipe",
         });
+        transport.stderr?.on("data", () => undefined);
         await client.connect(transport as Transport);
       } else {
         const url = new URL(config.url);

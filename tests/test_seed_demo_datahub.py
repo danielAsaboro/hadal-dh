@@ -45,6 +45,7 @@ def test_demo_entities_encode_dataset_column_and_model_training_lineage() -> Non
     assert upstreams.fineGrainedLineages[0].upstreams == [
         f"urn:li:schemaField:({source.urn},email)"
     ]
+    assert features._get_aspect(OwnershipClass).owners[0].owner == "urn:li:corpuser:cutset-demo"
 
     job_io = job._get_aspect(DataJobInputOutputClass)
     assert job_io is not None
@@ -53,6 +54,7 @@ def test_demo_entities_encode_dataset_column_and_model_training_lineage() -> Non
     model_props = model._get_aspect(MLModelPropertiesClass)
     assert model_props is not None
     assert model_props.trainingJobs == [str(job.urn)]
+    assert model._get_aspect(OwnershipClass).owners[0].owner == "urn:li:corpuser:cutset-demo"
 
     query_properties = query._get_aspect(QueryPropertiesClass)
     assert query_properties is not None

@@ -72,14 +72,25 @@ export class CasesService {
   }
 
   private async persist(value: ChangeCase, currentHeadSha: string, at: string): Promise<ChangeCase> {
-    const provisionallyVerified = await this.store.saveAndVerifyCase(value, at);
-    const evaluation = evaluateCase(provisionallyVerified, { currentHeadSha, evaluatedAt: at });
+    const evaluation = evaluateCase(value, {
+      currentHeadSha,
+      evaluatedAt: at,
+      twoPhaseWritebackPending: true,
+    });
     const governed = unverified({
-      ...provisionallyVerified,
+      ...value,
       state: evaluation.state,
       admission: evaluation.admission,
     }, at);
     const verified = await this.store.saveAndVerifyCase(governed, at);
+    const confirmed = evaluateCase(verified, { currentHeadSha, evaluatedAt: at });
+    if (
+      confirmed.state !== verified.state
+      || confirmed.admission.allowed !== verified.admission?.allowed
+      || JSON.stringify(confirmed.admission.blockers) !== JSON.stringify(verified.admission?.blockers)
+    ) {
+      throw new CasesServiceError("DataHub-reread case does not match deterministic policy");
+    }
     await this.replica?.save(verified);
     return verified;
   }

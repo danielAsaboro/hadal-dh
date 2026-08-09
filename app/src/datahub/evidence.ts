@@ -31,6 +31,7 @@ type Asset = Readonly<{ urn: string; type: string; name: string }>;
 type SummaryPath = Readonly<{
   downstream: Asset;
   downstreamColumns: readonly string[];
+  context: JsonRecord;
 }>;
 
 function pathEndpointMatches(nodeUrn: string, assetUrn: string, column?: string): boolean {
@@ -102,10 +103,36 @@ function normalizeLineage(response: unknown): readonly SummaryPath[] {
   }
   return results.map((result) => {
     const item = record(result, "lineage result");
+    const context = record(item.entity, "lineage entity");
     const columns = array(item.lineageColumns ?? [], "lineage columns").map((column) =>
       text(column, "lineage column"));
-    return { downstream: assetFromEntity(item.entity), downstreamColumns: columns };
+    return { downstream: assetFromEntity(context), downstreamColumns: columns, context };
   });
+}
+
+function mergeLineageSummaries(
+  columnLevel: readonly SummaryPath[],
+  entityLevel: readonly SummaryPath[],
+): readonly SummaryPath[] {
+  const merged = new Map<string, { downstream: Asset; columns: Set<string>; context: JsonRecord }>();
+  for (const summary of [...columnLevel, ...entityLevel]) {
+    if (["dataJob", "dataFlow", "schemaField"].includes(summary.downstream.type)) continue;
+    const current = merged.get(summary.downstream.urn) ?? {
+      downstream: summary.downstream,
+      columns: new Set<string>(),
+      context: summary.context,
+    };
+    if (current.downstream.type !== summary.downstream.type) {
+      throw new DataHubEvidenceError("DataHub lineage returned conflicting entity types");
+    }
+    for (const column of summary.downstreamColumns) current.columns.add(column);
+    merged.set(summary.downstream.urn, current);
+  }
+  return [...merged.values()].map(({ downstream, columns, context }) => ({
+    downstream,
+    downstreamColumns: [...columns].sort(),
+    context,
+  })).sort((left, right) => left.downstream.urn.localeCompare(right.downstream.urn));
 }
 
 async function exactPaths(
@@ -129,10 +156,16 @@ async function exactPaths(
         input.source_column = oldColumn;
         input.target_column = targetColumn;
       }
-      const payload = record(
-        await tools.callTool("get_lineage_paths_between", input),
-        "exact lineage response",
-      );
+      let rawPath: unknown;
+      try {
+        rawPath = await tools.callTool("get_lineage_paths_between", input);
+      } catch (error) {
+        throw new DataHubEvidenceError(
+          `exact lineage path lookup failed for ${source.urn} -> ${summary.downstream.urn}`,
+          { cause: error },
+        );
+      }
+      const payload = record(rawPath, "exact lineage response");
       const metadata = record(payload.metadata, "lineage metadata");
       const target = record(payload.target, "lineage target");
       const paths = array(payload.paths, "exact lineage paths");
@@ -256,6 +289,7 @@ async function normalizeAssertions(
 async function assetContexts(
   tools: DataHubToolCaller,
   source: Asset,
+  sourceContext: JsonRecord,
   summaries: readonly SummaryPath[],
   oldColumn: string,
 ): Promise<ImpactEvidence["assets"]> {
@@ -263,22 +297,8 @@ async function assetContexts(
   for (const summary of summaries) assets.set(summary.downstream.urn, summary.downstream);
   const ordered = [source, ...[...assets.values()].filter((asset) => asset.urn !== source.urn)
     .sort((left, right) => left.urn.localeCompare(right.urn))];
-  const rawEntities = array(
-    await tools.callTool("get_entities", { urns: ordered.map((asset) => asset.urn) }),
-    "get_entities response",
-  );
-  const returned = new Map<string, JsonRecord>();
-  for (const value of rawEntities) {
-    const entity = record(value, "entity");
-    const entityUrn = urn(entity.urn, "entity");
-    if (!assets.has(entityUrn) || returned.has(entityUrn) || entity.error) {
-      throw new DataHubEvidenceError("get_entities did not match requested URNs");
-    }
-    returned.set(entityUrn, entity);
-  }
-  if (returned.size !== ordered.length) {
-    throw new DataHubEvidenceError("get_entities did not return every requested URN");
-  }
+  const returned = new Map<string, JsonRecord>([[source.urn, sourceContext]]);
+  for (const summary of summaries) returned.set(summary.downstream.urn, summary.context);
 
   const contexts: Array<ImpactEvidence["assets"][number]> = [];
   for (const asset of ordered) {
@@ -330,7 +350,8 @@ export async function collectEvidence(
       await tools.callTool("get_entities", { urns: [source.urn] }),
       "source confirmation",
     );
-    if (confirmation.length !== 1 || urn(record(confirmation[0], "source entity").urn, "source entity") !== source.urn) {
+    const sourceContext = confirmation.length === 1 ? record(confirmation[0], "source entity") : undefined;
+    if (sourceContext === undefined || urn(sourceContext.urn, "source entity") !== source.urn || sourceContext.error) {
       throw new DataHubEvidenceError("get_entities did not confirm the resolved dataset");
     }
     const schema = record(await tools.callTool("list_schema_fields", {
@@ -351,7 +372,7 @@ export async function collectEvidence(
     if (!fields.includes(change.oldName)) {
       throw new DataHubEvidenceError(`verified DataHub schema does not contain column ${change.oldName}`);
     }
-    const summaries = normalizeLineage(await tools.callTool("get_lineage", {
+    const columnLineage = normalizeLineage(await tools.callTool("get_lineage", {
       urn: source.urn,
       column: change.oldName,
       upstream: false,
@@ -359,8 +380,16 @@ export async function collectEvidence(
       max_results: 50,
       offset: 0,
     }));
+    const entityLineage = normalizeLineage(await tools.callTool("get_lineage", {
+      urn: source.urn,
+      upstream: false,
+      max_hops: maxHops,
+      max_results: 50,
+      offset: 0,
+    }));
+    const summaries = mergeLineageSummaries(columnLineage, entityLineage);
     const paths = await exactPaths(tools, source, change.oldName, summaries);
-    const assets = await assetContexts(tools, source, summaries, change.oldName);
+    const assets = await assetContexts(tools, source, sourceContext, summaries, change.oldName);
     return ImpactEvidenceSchema.parse({
       complete: true,
       capabilities: {

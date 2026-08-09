@@ -92,6 +92,17 @@ describe("deterministic admission policy", () => {
     expect(result.admission.blockers).toEqual([]);
   });
 
+  it("can evaluate the intended final state only inside a guarded two-phase write", () => {
+    const ready = readyFacts();
+    const pending: ChangeCase = { ...ready, dataHub: { verified: false } };
+    expect(evaluateCase(pending, { currentHeadSha: "head", evaluatedAt: now }).admission.allowed).toBe(false);
+    expect(evaluateCase(pending, {
+      currentHeadSha: "head",
+      evaluatedAt: now,
+      twoPhaseWritebackPending: true,
+    }).admission.allowed).toBe(true);
+  });
+
   it("reports every missing prerequisite with stable blocker codes", () => {
     const result = evaluateCase(planned(), { currentHeadSha: "head", evaluatedAt: now });
 

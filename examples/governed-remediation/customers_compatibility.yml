@@ -1,0 +1,9 @@
+version: 2
+models:
+  - name: customers_compatibility
+    description: >-
+      Compatibility contract for Cutset case fbe74aa76740cd72a09bc797 at revision 0a2d9bc865ccbf226e0ec672.
+    columns:
+      - name: email
+        description: >-
+          Deprecated compatibility alias for email_address; remove only after governed consumer migration.

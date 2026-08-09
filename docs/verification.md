@@ -1,59 +1,67 @@
 # Verification
 
-## Automated checks
+## Local deterministic suite
 
 ```bash
-python3.13 -m venv .venv
-.venv/bin/pip install -e '.[dev]'
-.venv/bin/python -m pytest -q
-.venv/bin/python -m cutset.cli --help
+npm ci
+npm test
+npm run typecheck
+npm run build
 git diff --check
 ```
 
-The normal suite uses real temporary Git repositories and sanitized Agent Context Kit response shapes. Only the DataHub network boundary is replaced in CLI tests.
+Tests use real temporary Git repositories, real child processes, and an in-process HTTP contract server. The two network integration files are skipped unless real credentials are explicitly configured. The preserved Python slice remains independently verifiable with `.venv/bin/pytest -q`.
 
-## Live DataHub proof
+## Official DataHub MCP live test
 
-Configure a non-production DataHub instance and an existing `cutset-at-risk` tag:
-
-```bash
-cp .env.example .env
-set -a; source .env; set +a
-.venv/bin/python -m pytest tests/integration/test_datahub_gateway.py -q -m integration
-.venv/bin/cutset review \
-  --repo /path/to/dbt-repo \
-  --base BASE_SHA \
-  --head HEAD_SHA \
-  --repository-id owner/repo \
-  --output cutset-output \
-  --write-back \
-  --tag-name cutset-at-risk
-```
-
-Verify all four artifacts before recording the demo:
-
-1. `impact-report.json` and `impact-report.md` exist even when the verdict blocks.
-2. The report source URN, downstream URNs, owner, tags, glossary terms, query total, and quality totals match DataHub.
-3. Query literals are absent from the report and the compatibility SQL cites its supporting query URN.
-4. Ranked impact places the governed ML consumer above the intermediate dataset without changing policy.
-5. DataHub contains a related `Analysis` document with the same Cutset analysis key.
-6. A second identical run updates the same document instead of creating a duplicate.
-
-This checklist was completed on 2026-08-04 against the official DataHub v1.6.0
-Docker quickstart. The two runs produced byte-identical JSON and Markdown
-reports, updated one stable DataHub document, and left the existing
-`cutset-at-risk` tag on every affected asset. See the sanitized
-[live transcript](../examples/sample-run.md).
-
-The current local suite result is `72 passed, 2 skipped`; the two skips are the
-explicitly configured live integration tests.
-
-To reproduce the controlled metadata graph before running the checklist:
+Install the official server and configure a real DataHub instance:
 
 ```bash
-DATAHUB_GMS_URL=http://localhost:8080 \
-  .venv/bin/python scripts/seed_demo_datahub.py
+python3.13 -m venv .mcp-venv
+.mcp-venv/bin/pip install 'git+https://github.com/acryldata/mcp-server-datahub.git@v0.6.0'
+export CUTSET_DATAHUB_MCP_COMMAND="$PWD/.mcp-venv/bin/mcp-server-datahub"
+export DATAHUB_GMS_URL=http://127.0.0.1:8080
+export TOOLS_IS_MUTATION_ENABLED=true
+export DATA_QUALITY_TOOLS_ENABLED=true
+export SAVE_DOCUMENT_TOOL_ENABLED=true
+export SAVE_DOCUMENT_RESTRICT_UPDATES=false
+export CUTSET_INTEGRATION_MODEL=customers
+export CUTSET_INTEGRATION_OLD_COLUMN=email
+export CUTSET_INTEGRATION_NEW_COLUMN=email_address
+export CUTSET_INTEGRATION_DATASET_URN='urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.customers,PROD)'
+npm --workspace app test -- integration/datahub-mcp.test.ts
 ```
 
-Private environment transcripts belong in the parent workspace's
-`submission/evidence/`, never in this public repository.
+Set `CUTSET_INTEGRATION_WRITEBACK=1` and `CUTSET_INTEGRATION_GIT_REPOSITORY` to additionally prove two saves resolve to the same reread-verified DataHub document and content hash.
+
+The controlled graph can be ingested into a local non-production DataHub instance with the preserved seed utility:
+
+```bash
+DATAHUB_GMS_URL=http://127.0.0.1:8080 .venv/bin/python scripts/seed_demo_datahub.py
+```
+
+## Real GitHub live test
+
+Use an isolated repository and pull request. The token must be allowed to read the PR and collaborators, create/update issues, and create commit statuses.
+
+```bash
+export CUTSET_GITHUB_TOKEN=...
+export CUTSET_GITHUB_REPOSITORY=owner/repository
+export CUTSET_GITHUB_PULL_NUMBER=123
+export CUTSET_GITHUB_ASSIGNEE=login
+npm --workspace app test -- integration/github.test.ts
+```
+
+The test creates or updates one marker-bound issue, rereads it, reruns without duplication, verifies the authenticated actor and collaborator permission, publishes a commit status, and rereads the combined status. An invalid or absent credential is a hard blocker—not a skipped success claim.
+
+## Verified local proof on 2026-08-09
+
+The TypeScript CLI ran against a real two-commit dbt repository and DataHub OSS v1.6.0 through official MCP server v0.6.0. It proved:
+
+- exact Git SHAs `988c910…` → `4f508e2…` and `customers.email → email_address`;
+- real schema, redacted usage SQL, ownership, tags, glossary term, incident health, column lineage, and a four-node dataset→dataset→DataJob→MLModel path;
+- three graph-derived work items, two approval requirements, and three successful artifact-hashed command receipts;
+- one stable DataHub document URN, updated and reread with a verified canonical hash;
+- fail-closed blockers for missing GitHub task projections and approvals.
+
+The sanitized result is [examples/governed-change-case.md](../examples/governed-change-case.md). Private raw transcripts remain outside the public repository under the parent workspace.

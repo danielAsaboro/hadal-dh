@@ -87,6 +87,12 @@ function completeReplies(): Readonly<Record<string, readonly Reply[]>> {
     "customer_churn",
     "urn:li:corpuser:ml_owner",
   );
+  const job = entity(
+    "urn:li:dataJob:(urn:li:dataFlow:(airflow,cutset-demo,PROD),train-churn)",
+    "dataJob",
+    "train-churn",
+    "urn:li:corpuser:ml_owner",
+  );
   const assertion = {
     urn: "urn:li:assertion:email-not-null",
     type: "FIELD",
@@ -124,6 +130,21 @@ function completeReplies(): Readonly<Record<string, readonly Reply[]>> {
           hasMore: false,
           searchResults: [
             { entity: consumer, degree: "1", lineageColumns: ["customer_email"] },
+            { entity: model, degree: "2", lineageColumns: [] },
+          ],
+        },
+      },
+      {
+        downstreams: {
+          start: 0,
+          count: 3,
+          offset: 0,
+          returned: 3,
+          total: 3,
+          hasMore: false,
+          searchResults: [
+            { entity: consumer, degree: "1", lineageColumns: [] },
+            { entity: job, degree: "2", lineageColumns: [] },
             { entity: model, degree: "2", lineageColumns: [] },
           ],
         },
@@ -215,6 +236,13 @@ describe("DataHub evidence collection", () => {
       max_results: 50,
       offset: 0,
     });
+    expect(tools.calls.filter(([name]) => name === "get_lineage")[1]?.[1]).toEqual({
+      urn: sourceUrn,
+      upstream: false,
+      max_hops: 3,
+      max_results: 50,
+      offset: 0,
+    });
   });
 
   it("accepts verified column-level paths whose endpoints are schema-field URNs", async () => {
@@ -292,8 +320,7 @@ describe("DataHub evidence collection", () => {
       }];
     }],
     ["missing entity", (replies: Record<string, readonly Reply[]>) => {
-      const first = replies.get_entities?.[0];
-      replies.get_entities = [first ?? [], []];
+      replies.get_entities = [[]];
     }],
   ])("fails closed on incomplete %s", async (_label, mutate) => {
     const replies = { ...completeReplies() } as Record<string, readonly Reply[]>;

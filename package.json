@@ -6,6 +6,7 @@
     "build": "npm --workspace app run build",
     "cli": "npm --workspace app run cli --",
     "dev": "npm --workspace app run dev",
+    "demo": "npm --workspace app run demo",
     "serve": "npm --workspace app run serve",
     "test": "npm --workspace app run test",
     "typecheck": "npm --workspace app run typecheck"

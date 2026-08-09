@@ -7,6 +7,7 @@
     "build": "tsc --noEmit && vite build",
     "cli": "tsx src/cli.ts",
     "dev": "vite",
+    "demo": "tsx scripts/governed-demo.ts",
     "serve": "tsx src/server/index.ts",
     "test": "vitest run",
     "test:watch": "vitest",

@@ -96,6 +96,7 @@ def build_demo_entities() -> Sequence[Entity]:
             ("customer_id", "VARCHAR", "Stable customer identifier."),
             ("email_hash", "VARCHAR", "Privacy-preserving email feature."),
         ],
+        owners=["cutset-demo"],
         upstreams={customers.urn: {"email_hash": ["email"]}},
     )
     training_flow = DataFlow(
@@ -109,6 +110,7 @@ def build_demo_entities() -> Sequence[Entity]:
         flow=training_flow,
         display_name="Train Churn Model",
         description="Trains churn_prediction_v2 from customer features.",
+        owners=["cutset-demo"],
         inlets=[customer_features.urn],
     )
     churn_model = MLModel(
@@ -116,6 +118,7 @@ def build_demo_entities() -> Sequence[Entity]:
         platform="mlflow",
         name="Churn Prediction v2",
         description="Demo model that depends on the customer email feature path.",
+        owners=["cutset-demo"],
         training_jobs=[training_job.urn],
     )
     usage_query = DemoQuery(

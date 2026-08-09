@@ -1,52 +1,52 @@
-# Cutset architecture
+# Architecture
 
-Cutset is a narrow PR safety agent: it accepts one dbt column rename, grounds the impact in DataHub, and produces a deterministic merge verdict plus a reviewable compatibility patch.
+Cutset is a TypeScript coordination service around a canonical, versioned `ChangeCase`. DataHub owns the institutional record; GitHub owns only projected execution objects.
 
 ```text
-Git base/head
-    │
-    ▼
-dbt diff parser ── unsupported/ambiguous ──► exit 2
-    │
-    ▼
-DataHub search → schema → lineage → exact paths → governance/usage/quality
-    │                                      │
-    │                         incomplete ──► exit 3
-    ▼
-normalized immutable evidence
-    │
-    ├─ deterministic safety policy
-    │      └─ unsafe impact ───────────────► exit 4
-    │
-    ├─ constrained remediation + validator ─► exit 5 if invalid
-    │
-    ├─ JSON / Markdown reports
-    │
-    └─ optional DataHub document + tag ─────► exit 6 on write failure
+Git repository                         DataHub metadata graph
+base SHA → head SHA                    schema, ownership, governance
+        │                              column + entity lineage, queries
+        └──────────┬────────────────────────────┘
+                   ▼
+          evidence compiler (fail closed)
+                   ▼
+       canonical case + stable revision key
+          │          │             │
+          │          │             └─ deterministic policy
+          │          └─ compatibility artifacts + executable receipts
+          └─ owner work/approvals projected to GitHub
+                   ▼
+       two-phase DataHub document write + exact reread
+                   ▼
+        verified commit status: pending/failure/success
 ```
+
+## Identity and idempotency
+
+- `caseKey` binds repository, resolved source URN, and logical dbt change.
+- `revisionKey` additionally binds base SHA, head SHA, and the canonical evidence fingerprint.
+- `workKey` binds the case, work kind, owner URN, and affected URNs.
+- A DataHub document title contains the stable case key. Exact search rejects duplicates and fuzzy matches.
+- GitHub issue bodies carry exact hidden case/work/revision markers. Create and update operations are reread and compared.
 
 ## Trust boundaries
 
-- Git revisions are validated before `git diff` runs.
-- Dataset and tag URNs are retained from DataHub search results; Cutset never constructs them.
-- Pagination and token truncation make evidence incomplete and therefore blocking.
-- Query SQL comments are removed and literals are replaced with placeholders before entering evidence or reports.
-- Merge safety is pure policy code. A model may draft remediation, but cannot choose the verdict.
-- Impact ranking is deterministic and advisory; it never changes the merge verdict.
-- Generated SQL is limited to one compatibility alias over a relation verified from a DataHub query or dataset URN. Cutset emits it for review and never applies it.
-- Write-back targets are derived only from the current evidence graph. The report is written locally before any mutation.
+- Git commands use argument arrays with validated revisions; validators run with `shell:false`, timeouts, bounded output, and artifact containment checks.
+- Dataset identity is resolved by DataHub search and confirmed by entity read. Cutset never guesses a dataset URN.
+- Both column-level lineage and entity-level multi-hop lineage must report complete pagination. Exact paths preserve schema-field and intermediate DataJob URNs.
+- DataJob/DataFlow nodes remain in audit paths but are not treated as end-consumer work targets.
+- Owners come from the current graph. Zero or multiple owners block work derivation; an explicit DataHub-owner→GitHub-login mapping is also required.
+- GitHub preflight verifies PR head SHA, repository, assignee eligibility, and all mappings before mutation.
+- Approval decisions bind requirement, role, owner URN, verified GitHub actor, revision key, and head SHA.
+- DataHub document writes are two phase: an unverified/blocked form is saved and reread before the verified form can be saved and reread.
+- Policy can evaluate the intended final state inside that guarded write, but merge admission is returned only after the verified reread.
 
-## DataHub capabilities used
+## DataHub MCP tools
 
-- `search` resolves the changed dbt model and the configured risk tag.
-- `get_entities` confirms every relevant asset and normalizes ownership, tags, glossary terms, and health.
-- `list_schema_fields` verifies the old column.
-- `get_lineage` traces downstream column consumers through three hops.
-- `get_lineage_paths_between` preserves intermediate assets, queries, and columns for audit.
-- `get_dataset_queries` supplies bounded, literal-redacted usage evidence and remediation grounding.
-- `get_dataset_assertions` supplies bounded quality totals and samples.
-- `search_documents` finds an existing analysis by stable key.
-- `save_document` creates or updates the impact analysis.
-- `add_tags` marks the affected assets with an existing catalog tag.
+Cutset uses `search`, `get_entities`, `list_schema_fields`, `get_lineage`, `get_lineage_paths_between`, `get_dataset_queries`, `search_documents`, `grep_documents`, and `save_document`. `get_dataset_assertions` is used only when advertised by the connected server. Purpose-built document tools avoid generic document expansion and keep the canonical envelope under the official 8,000-character read limit.
 
-The GitHub workflow runs on `pull_request_target`, installs Cutset only from the trusted base commit, and checks out the PR head into a separate directory treated strictly as Git diff data. DataHub secrets are additionally gated by the protected `datahub-review` environment; candidate code is never imported or executed.
+The case document contains a human summary and a delimited gzip/base64 canonical envelope. Its SHA-256 content hash is recomputed after every read.
+
+## Merge authority
+
+The pure policy evaluator emits stable blocker codes. Admission is allowed only when evidence and ownership are complete, the PR head matches, every work projection is verified, every required receipt succeeds for the same revision/SHA, every producer and consumer approval is verified, and final DataHub write-back is verified. GitHub receives the resulting commit status; it does not become the canonical store.

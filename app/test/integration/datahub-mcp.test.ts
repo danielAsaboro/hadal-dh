@@ -64,12 +64,14 @@ async function liveEvidence(client: DataHubMcpClient) {
     expect(evidence.complete).toBe(true);
     expect(evidence.schemaFields).toContain(oldName);
     expect(evidence.paths.length).toBeGreaterThan(0);
+    expect(evidence.assets.some((asset) => asset.type === "mlModel")).toBe(true);
+    expect(evidence.paths.some((path) => path.nodes.length >= 4)).toBe(true);
     const expectedUrn = process.env.CUTSET_INTEGRATION_DATASET_URN;
     if (expectedUrn !== undefined) expect(evidence.source.urn).toBe(expectedUrn);
   } finally {
     await client.close();
   }
-}, 60_000);
+}, 180_000);
 
 const liveWriteback = live && process.env.CUTSET_INTEGRATION_WRITEBACK === "1";
 

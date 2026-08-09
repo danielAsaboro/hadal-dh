@@ -120,6 +120,8 @@ export const ImpactEvidenceSchema = z
   .strict()
   .readonly();
 
+export type ImpactEvidence = z.infer<typeof ImpactEvidenceSchema>;
+
 const CaseRevisionSchema = z
   .object({
     revisionKey: stableKey,

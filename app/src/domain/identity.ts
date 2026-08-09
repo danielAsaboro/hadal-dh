@@ -71,3 +71,18 @@ export function workKey(
     ...governed,
   ]);
 }
+
+export function approvalRequirementKey(
+  logicalCaseKey: string,
+  role: string,
+  ownerUrn: string,
+  affectedUrns: readonly string[],
+): string {
+  if (affectedUrns.length === 0) throw new Error("affected URNs must be non-empty");
+  return stableKey([
+    requireText(logicalCaseKey, "case key"),
+    requireText(role, "approval role"),
+    requireUrn(ownerUrn, "owner"),
+    ...[...new Set(affectedUrns.map((value) => requireUrn(value, "affected asset")))].sort(),
+  ]);
+}

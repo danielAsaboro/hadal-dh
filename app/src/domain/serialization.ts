@@ -4,7 +4,7 @@ import { ChangeCaseSchema, type ChangeCase } from "./case";
 
 type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
 
-function canonicalize(value: unknown): JsonValue {
+export function canonicalize(value: unknown): JsonValue {
   if (value === null || typeof value === "boolean" || typeof value === "number" || typeof value === "string") {
     return value;
   }
@@ -20,14 +20,19 @@ function canonicalize(value: unknown): JsonValue {
   throw new Error(`unsupported canonical JSON value: ${typeof value}`);
 }
 
+export function canonicalValueHash(value: unknown): string {
+  return createHash("sha256")
+    .update(JSON.stringify(canonicalize(value)), "utf8")
+    .digest("hex");
+}
+
 function withoutContentHash(value: ChangeCase): Record<string, unknown> {
   const { contentHash: _contentHash, ...content } = value;
   return content;
 }
 
 export function caseContentHash(value: ChangeCase): string {
-  const canonical = JSON.stringify(canonicalize(withoutContentHash(value)));
-  return createHash("sha256").update(canonical, "utf8").digest("hex");
+  return canonicalValueHash(withoutContentHash(value));
 }
 
 export function serializeCase(value: ChangeCase): string {

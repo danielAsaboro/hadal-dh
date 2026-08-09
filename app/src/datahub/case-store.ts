@@ -55,6 +55,48 @@ export class DataHubCaseStore {
     }
   }
 
+  async listCases(): Promise<readonly ChangeCase[]> {
+    try {
+      const found = new Map<string, string>();
+      let offset = 0;
+      let total = 0;
+      do {
+        const payload = record(await this.tools.callTool("search", {
+          query: "/q \"Cutset change case\"",
+          filter: "entity_type = document",
+          num_results: 50,
+          offset,
+        }), "case index response");
+        const results = array(payload.searchResults, "case index results");
+        const start = integer(payload.start, "case index start");
+        const count = integer(payload.count, "case index count");
+        total = integer(payload.total, "case index total");
+        if (start !== offset || count !== results.length || offset + results.length > total || (results.length === 0 && offset < total)) {
+          throw new DataHubCaseStoreError("case index pagination is incomplete");
+        }
+        for (const result of results) {
+          const entity = record(record(result, "case index result").entity, "case index entity");
+          const title = record(entity.info, "case index info").title;
+          const match = typeof title === "string" ? /^Cutset change case ([a-f0-9]{24})$/.exec(title) : null;
+          if (match?.[1]) {
+            if (found.has(match[1])) throw new DataHubCaseStoreError(`multiple exact Cutset case documents exist: ${match[1]}`);
+            found.set(match[1], urn(entity.urn, "case document"));
+          }
+        }
+        offset += results.length;
+      } while (offset < total);
+      const values: ChangeCase[] = [];
+      for (const [caseKey, documentUrn] of [...found].sort(([left], [right]) => left.localeCompare(right))) {
+        const value = await this.loadCase(documentUrn);
+        if (value.caseKey !== caseKey) throw new DataHubCaseStoreError("case index title does not match document content");
+        values.push(value);
+      }
+      return values;
+    } catch (error) {
+      throw storeError(error);
+    }
+  }
+
   async loadCase(documentUrn: string): Promise<ChangeCase> {
     try {
       const response = array(

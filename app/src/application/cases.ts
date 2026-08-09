@@ -24,6 +24,7 @@ export interface CaseStore {
   findCase(caseKey: string): Promise<string | undefined>;
   loadCase(documentUrn: string): Promise<ChangeCase>;
   saveAndVerifyCase(value: ChangeCase, verifiedAt: string): Promise<ChangeCase>;
+  listCases?(): Promise<readonly ChangeCase[]>;
 }
 
 export interface WorkSurface {
@@ -114,6 +115,11 @@ export class CasesService {
 
   async show(caseKey: string): Promise<ChangeCase> {
     return await this.load(caseKey);
+  }
+
+  async list(): Promise<readonly ChangeCase[]> {
+    if (this.store.listCases === undefined) throw new CasesServiceError("case store does not support governed case indexing");
+    return await this.store.listCases();
   }
 
   async syncWork(caseKey: string, surface: WorkSurface, at: string): Promise<ChangeCase> {

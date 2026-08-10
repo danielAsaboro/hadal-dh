@@ -81,7 +81,8 @@ export function createServer(dependencies: ServerDependencies): FastifyInstance 
   });
   registerSessionRoutes(server, dependencies.session);
   server.addHook("onRequest", async (request, reply) => {
-    if (dependencies.session === undefined || !/^\/api\/(cases|agent)(?:\/|$)/.test(request.url)) return;
+    const pathname = request.url.split("?", 1)[0] ?? "";
+    if (dependencies.session === undefined || !/^\/api\/(cases|agent)(?:\/|$)/.test(pathname)) return;
     await requireSession(request, reply, dependencies.session);
   });
   server.get("/api/health", async () => ({ ok: true, service: "changemarshal" }));

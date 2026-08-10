@@ -33,6 +33,8 @@ describe("operator sessions", () => {
     const server = createServer({ application: application(), github: () => ({}) as never, session });
     try {
       expect((await server.inject({ method: "GET", url: "/api/cases" })).statusCode).toBe(401);
+      expect((await server.inject({ method: "GET", url: "/api/cases?probe=1" })).statusCode).toBe(401);
+      expect((await server.inject({ method: "GET", url: "/api/agent/health?probe=1" })).statusCode).toBe(401);
       expect((await server.inject({ method: "GET", url: "/api/session" })).json()).toEqual({ configured: true, authenticated: false });
 
       const wrong = await server.inject({ method: "POST", url: "/api/session", payload: { passphrase: "wrong" } });

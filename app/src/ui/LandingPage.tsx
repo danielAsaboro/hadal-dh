@@ -6,9 +6,9 @@ export function LandingPage({ onEnterWorkspace }: LandingPageProps) {
   return (
     <div className="landing-page">
       <header className="landing-nav">
-        <a className="brand-lockup" href="#top" aria-label="ChangeMarshal home">
-          <span className="cut-mark">CM/</span>
-          <span>ChangeMarshal</span>
+        <a className="brand-lockup" href="#top" aria-label="Hadal home">
+          <span className="cut-mark">HD/</span>
+          <span>Hadal</span>
         </a>
         <nav aria-label="Landing navigation">
           <a href="#method">How it works</a>
@@ -21,7 +21,7 @@ export function LandingPage({ onEnterWorkspace }: LandingPageProps) {
           <p className="eyebrow">Metadata-aware change coordination</p>
           <h1 id="landing-title">Turn graph evidence into coordinated, accountable, validated work.</h1>
           <p>
-            DataHub is the canonical institutional memory. ChangeMarshal reads that governed context,
+            DataHub is the canonical institutional memory. Hadal reads that governed context,
             coordinates the work it requires, validates the outcome, and writes durable resolution back.
           </p>
           <a href="/workspace" onClick={(event) => {

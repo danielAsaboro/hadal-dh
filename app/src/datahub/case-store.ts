@@ -3,6 +3,7 @@ import {
 } from "../domain/case";
 import {
   caseDocumentTitle,
+  formerCaseDocumentTitle,
   isCaseDocumentTitle,
   legacyCaseDocumentTitle,
   MAX_DATAHUB_DOCUMENT_CHARS,
@@ -27,6 +28,8 @@ function storeError(error: unknown): DataHubCaseStoreError {
 }
 
 function stableCaseUrn(caseKey: string): string {
+  // This stable URN predates the public Hadal rename. Changing it would split
+  // canonical DataHub records, so Hadal keeps it as an identity, not branding.
   return `urn:li:document:changemarshal-change-case-${caseKey}`;
 }
 
@@ -35,7 +38,7 @@ export class DataHubCaseStore {
 
   private async findCaseMatch(caseKey: string): Promise<Readonly<{ urn: string; title: string }> | undefined> {
     try {
-      const titles = new Set([caseDocumentTitle(caseKey), legacyCaseDocumentTitle(caseKey)]);
+      const titles = new Set([caseDocumentTitle(caseKey), formerCaseDocumentTitle(caseKey), legacyCaseDocumentTitle(caseKey)]);
       const payload = record(await this.tools.callTool("search_documents", {
         query: `/q "change case ${caseKey}"`,
         num_results: 10,
@@ -59,7 +62,7 @@ export class DataHubCaseStore {
         const info = record(entity.info, "document info");
         if (titles.has(String(info.title))) exact.set(entityUrn, String(info.title));
       }
-      if (exact.size > 1) throw new DataHubCaseStoreError("multiple exact ChangeMarshal or legacy Cutset case documents exist");
+      if (exact.size > 1) throw new DataHubCaseStoreError("multiple exact Hadal, ChangeMarshal, or legacy Cutset case documents exist");
       const match = [...exact][0];
       return match === undefined ? undefined : { urn: match[0], title: match[1] };
     } catch (error) {
@@ -109,12 +112,12 @@ export class DataHubCaseStore {
           const entity = record(record(result, "case index result").entity, "case index entity");
           const title = record(entity.info, "case index info").title;
           const match = typeof title === "string"
-            ? /^(?:ChangeMarshal|Cutset) change case ([a-f0-9]{24})$/.exec(title)
+            ? /^(?:Hadal|ChangeMarshal|Cutset) change case ([a-f0-9]{24})$/.exec(title)
             : null;
           if (match?.[1]) {
             const documentUrn = urn(entity.urn, "case document");
             if (found.has(match[1]) && found.get(match[1]) !== documentUrn) {
-              throw new DataHubCaseStoreError(`multiple exact ChangeMarshal or legacy Cutset case documents exist: ${match[1]}`);
+              throw new DataHubCaseStoreError(`multiple exact Hadal, ChangeMarshal, or legacy Cutset case documents exist: ${match[1]}`);
             }
             found.set(match[1], documentUrn);
           }
@@ -183,7 +186,7 @@ export class DataHubCaseStore {
       document_type: "Analysis",
       title: caseDocumentTitle(value.caseKey),
       content: renderCaseDocument(value),
-      topics: ["changemarshal", "governed-change", value.state],
+      topics: ["hadal", "governed-change", value.state],
       related_assets: relatedAssets,
     };
     // DataHub's document search index is eventually consistent. A stable, case-key-derived

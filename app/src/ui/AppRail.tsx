@@ -119,7 +119,7 @@ export function AppRail({ route, onNavigate, sessionAction, disabled }: Readonly
 }>) {
   return (
     <aside className="app-rail" aria-label="Workspace application rail">
-      <div className="brand-lockup"><span className="cut-mark">CM/</span><span>ChangeMarshal</span></div>
+      <div className="brand-lockup"><span className="cut-mark">HD/</span><span>Hadal</span></div>
       <p className="rail-label">Operations</p>
       <Navigation route={route} onNavigate={onNavigate} label="Workspace navigation" />
       <CanonicalStatus />

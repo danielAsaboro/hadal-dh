@@ -1,4 +1,4 @@
-# Real ChangeMarshal governed change case
+# Real Hadal governed change case
 
 This sanitized sample was produced by the TypeScript CLI on 2026-08-09 from a real Git repository, DataHub OSS v1.6.0, and official DataHub MCP server v0.6.0. It is intentionally blocked because the configured GitHub credential was invalid; no task or approval success is simulated.
 

@@ -1,8 +1,8 @@
-# ChangeMarshal
+# Hadal
 
-> Turn DataHub graph evidence into coordinated, accountable work—and write every decision and outcome back to the graph.
+> Governed change intelligence for data systems.
 
-A dbt column rename can cross team boundaries before anyone sees the breakage. ChangeMarshal detects the real Git change, resolves the model in DataHub, follows exact column and multi-hop lineage, and compiles one durable change case. That case drives owner-specific GitHub work, SHA-bound approvals, generated compatibility artifacts, executable validation receipts, and a deterministic merge status.
+A dbt column rename can cross team boundaries before anyone sees the breakage. Hadal traces the proposed change into the deepest reaches of the DataHub dependency graph, surfaces downstream risk, coordinates governed remediation, and records the resolution in DataHub. **See every consequence before the change ships.**
 
 DataHub is the governed source of truth. GitHub is an execution surface. An LLM never decides whether a change may merge.
 
@@ -68,10 +68,10 @@ The observed official NYC URNs, counts, dates, lineage, governance, MCP
 capability flags, and stable write-back URN are in the sanitized
 [`proof-summary.json`](examples/official-datahub-scenario/proof-summary.json).
 
-### Using DataHub Skills with ChangeMarshal
+### Using DataHub Skills with Hadal
 
 DataHub Skills guide development and investigation; they are not a runtime
-dependency of ChangeMarshal. Install the pinned official package in a private
+dependency of Hadal. Install the pinned official package in a private
 agent workspace and invoke the lineage skill against a real URN:
 
 ```bash
@@ -118,9 +118,20 @@ npm run build
 npm run serve
 ```
 
+## Brand and compatibility notes
+
+Hadal is the public product name. The repository slug, npm package/command
+(`change-marshal` / `changemarshal`), `CHANGEMARSHAL_*` environment variables,
+`.changemarshal` local replica path, DataHub document URNs, and GitHub HTML
+markers intentionally remain stable so an existing case, integration, or audit
+record continues to resolve. Hadal reads existing ChangeMarshal and Cutset
+case documents and issue markers, then updates the same external records in
+place when an operator reruns the real workflow. No domain or deployment URL
+is claimed here until the owner confirms it.
+
 ## Approval-gated AI SDK 7 agent
 
-`changemarshal agent` runs a real Vercel AI SDK 7 `ToolLoopAgent` through QVAC's official AI SDK provider. Managed mode defaults to the tool-capable `qwen3.6-27b` model with a 16,384-token context, verified on a 36 GB Apple-silicon host; smaller machines can explicitly select `qwen3.5-4b`. External mode attaches to an explicitly configured QVAC OpenAI-compatible endpoint. The shipped command-center and CLI workflow fixes the plan to `readCase → generateRemediation`; callers cannot replace it. The runtime also binds every case-scoped tool argument to `--case-key` and verifies that case against the resolved repository, base, head, and live `HEAD` before model startup. The fixed scope supplies owner mappings, validator arguments, artifact paths, and status URL; the model cannot replace them. Every mutating tool remains configured as AI SDK `user-approval`, and deterministic policy alone owns merge authority.
+The retained `changemarshal agent` command runs a real Vercel AI SDK 7 `ToolLoopAgent` through QVAC's official AI SDK provider. Managed mode defaults to the tool-capable `qwen3.6-27b` model with a 16,384-token context, verified on a 36 GB Apple-silicon host; smaller machines can explicitly select `qwen3.5-4b`. External mode attaches to an explicitly configured QVAC OpenAI-compatible endpoint. The Hadal command-center and CLI workflow fixes the plan to `readCase → generateRemediation`; callers cannot replace it. The runtime also binds every case-scoped tool argument to `--case-key` and verifies that case against the resolved repository, base, head, and live `HEAD` before model startup. The fixed scope supplies owner mappings, validator arguments, artifact paths, and status URL; the model cannot replace them. Every mutating tool remains configured as AI SDK `user-approval`, and deterministic policy alone owns merge authority.
 
 ```bash
 npm run changemarshal -- agent \
@@ -136,7 +147,7 @@ npm run changemarshal -- agent \
              .changemarshal/remediation/customers_compatibility.yml
 ```
 
-The terminal uses `y`/`n` for each proposed mutation. The web command center exposes the same exact-argument, expiring, single-use approval gate. Before a run and again before continuation, its HTTP boundary re-resolves the configured base, head, and live checkout, rejecting a different case repository or any moved Git `HEAD`. Token-free run events, denials, approvals, tool outcomes, and terminal answers are idempotently written into the same canonical DataHub case and reread before the UI presents them. Set `CHANGEMARSHAL_AGENT_ENABLED=1` plus every fixed-scope variable shown in `.env.example` to enable it; otherwise its health endpoint returns 503. Deterministic case policy alone computes merge admission. The GitHub mutation portion remains credential-gated and must not be treated as live-verified merely because its contract suite passes.
+The terminal uses `y`/`n` for each proposed mutation. The Hadal command center exposes the same exact-argument, expiring, single-use approval gate. Before a run and again before continuation, its HTTP boundary re-resolves the configured base, head, and live checkout, rejecting a different case repository or any moved Git `HEAD`. Token-free run events, denials, approvals, tool outcomes, and terminal answers are idempotently written into the same canonical DataHub case and reread before the UI presents them. Set the retained `CHANGEMARSHAL_AGENT_ENABLED=1` plus every fixed-scope variable shown in `.env.example` to enable it; otherwise its health endpoint returns 503. Deterministic case policy alone computes merge admission. The GitHub mutation portion remains credential-gated and must not be treated as live-verified merely because its contract suite passes.
 
 The repository-owned executable launcher invokes the official `@qvac/cli` and merges `app/qvac.config.json` into the provider-generated private config, raising the registry client's stalled-block timeout and retry limit for real multi-gigabyte downloads. On macOS, managed mode automatically selects a short temporary path when the inherited application temp path would exceed the native worker's Unix-socket limit. Run the same semantic check on each target host before relying on its local model:
 
@@ -158,6 +169,6 @@ The credential-gated integration suites are `npm run test:integration:datahub` a
 
 ## Rename compatibility
 
-`changemarshal` and `CHANGEMARSHAL_*` are canonical. The legacy `cutset` npm command and `CUTSET_*` variables remain deterministic migration aliases: equal old/new values are accepted, conflicting values fail, and a legacy-only value emits a migration warning. Exact legacy `.cutset` case and remediation files move to `.changemarshal`; conflicting dual files fail. Existing Cutset DataHub document titles/envelopes and GitHub issue markers are recognized and rewritten in place, preserving their document URNs, issue IDs, case keys, and audit history.
+The retained `changemarshal` command and `CHANGEMARSHAL_*` configuration prefix remain stable compatibility identifiers. The older `cutset` npm command and `CUTSET_*` variables remain deterministic migration aliases: equal old/new values are accepted, conflicting values fail, and a legacy-only value emits a migration warning. Exact legacy `.cutset` case and remediation files move to `.changemarshal`; conflicting dual files fail. Existing ChangeMarshal and Cutset DataHub document titles/envelopes and GitHub issue markers are recognized and rewritten in place, preserving their document URNs, issue IDs, case keys, and audit history.
 
 The repository began from DataHub's official Agent Starter; provenance is recorded in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Licensed under Apache 2.0.

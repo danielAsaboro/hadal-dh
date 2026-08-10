@@ -36,7 +36,7 @@ export function generateCompatibilityMigration(value: ChangeCase): readonly Reme
     assertion.column === oldName && assertion.type.toUpperCase().includes("NOT_NULL"));
   const yamlTests = hasNotNull ? "\n        tests:\n          - not_null" : "";
   const sql = [
-    `-- ChangeMarshal case ${value.caseKey}; revision ${value.revision.revisionKey}`,
+    `-- Hadal case ${value.caseKey}; revision ${value.revision.revisionKey}`,
     `-- Compatibility view for ${value.evidence.source.urn}`,
     "SELECT",
     "  source.* ,",
@@ -49,7 +49,7 @@ export function generateCompatibilityMigration(value: ChangeCase): readonly Reme
     "models:",
     `  - name: ${model}_compatibility`,
     "    description: >-",
-    `      Compatibility contract for ChangeMarshal case ${value.caseKey} at revision ${value.revision.revisionKey}.`,
+    `      Compatibility contract for Hadal case ${value.caseKey} at revision ${value.revision.revisionKey}.`,
     "    columns:",
     `      - name: ${oldName}${yamlTests}`,
     "        description: >-",
@@ -62,7 +62,7 @@ export function generateCompatibilityMigration(value: ChangeCase): readonly Reme
       content: sql,
       legacy: {
         relativePath: `.cutset/remediation/${model}_compatibility.sql`,
-        content: sql.replace("ChangeMarshal case", "Cutset case"),
+        content: sql.replace("Hadal case", "Cutset case"),
       },
     },
     {
@@ -70,7 +70,7 @@ export function generateCompatibilityMigration(value: ChangeCase): readonly Reme
       content: yaml,
       legacy: {
         relativePath: `.cutset/remediation/${model}_compatibility.yml`,
-        content: yaml.replace("ChangeMarshal case", "Cutset case"),
+        content: yaml.replace("Hadal case", "Cutset case"),
       },
     },
   ];

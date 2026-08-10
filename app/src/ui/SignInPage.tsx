@@ -30,10 +30,10 @@ export function SignInPage({ onSignIn }: SignInPageProps) {
   return (
     <main className="sign-in-page" aria-labelledby="sign-in-title">
       <section aria-labelledby="sign-in-title">
-        <div className="brand-lockup"><span className="cut-mark">CM/</span><span>ChangeMarshal</span></div>
+        <div className="brand-lockup"><span className="cut-mark">HD/</span><span>Hadal</span></div>
         <p className="eyebrow">Governed operator access</p>
         <h1 id="sign-in-title">Operator sign-in</h1>
-        <p>Enter the passphrase configured by this ChangeMarshal deployment to access real governed cases.</p>
+        <p>Enter the passphrase configured by this Hadal deployment to access real governed cases.</p>
         {error && <p className="error-banner" role="alert">{error}</p>}
         <form onSubmit={(event) => void submit(event)}>
           <label htmlFor="operator-passphrase">Operator passphrase</label>

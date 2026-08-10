@@ -2,7 +2,7 @@
 
 ## DataHub Agent Starter
 
-ChangeMarshal began from the DataHub Agent Starter by Lakshay Nasa. The preserved
+Hadal began from the DataHub Agent Starter by Lakshay Nasa. The preserved
 Python import namespace remains `cutset` for backward compatibility:
 
 https://github.com/lakshay-nasa/datahub-agent-starter
@@ -33,7 +33,7 @@ The starter was provided under the MIT License:
 
 ## Runtime libraries
 
-ChangeMarshal installs these libraries from their published packages; it does
+Hadal installs these libraries from their published packages; it does
 not vendor their source or model weights in this repository. Their package
 licenses and notices remain present after `npm ci`.
 
@@ -45,11 +45,11 @@ licenses and notices remain present after `npm ci`.
   https://github.com/modelcontextprotocol/typescript-sdk
 
 The QVAC model artifact is downloaded at runtime from the exact registry source
-declared by the installed provider and is not distributed with ChangeMarshal.
+declared by the installed provider and is not distributed with Hadal.
 
 ## Official DataHub resource evidence
 
-The public examples contain only ChangeMarshal's sanitized observations and
+The public examples contain only Hadal's sanitized observations and
 real DataHub URNs; they do not redistribute the official databases, agent
 packages, or repository source.
 

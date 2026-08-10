@@ -32,7 +32,7 @@ function issueBody(value: ChangeCase, work: ChangeCase["workItems"][number]): st
   return [
     `# ${work.title}`,
     "",
-    `ChangeMarshal case \`${value.caseKey}\` requires this work for Git head \`${value.revision.headSha}\`.`,
+    `Hadal case \`${value.caseKey}\` requires this work for Git head \`${value.revision.headSha}\`.`,
     "",
     "## Affected DataHub assets",
     "",
@@ -42,7 +42,7 @@ function issueBody(value: ChangeCase, work: ChangeCase["workItems"][number]): st
     "",
     criteria,
     "",
-    "Closing this issue is not completion evidence. ChangeMarshal requires a current validation receipt and governed approval.",
+    "Closing this issue is not completion evidence. Hadal requires a current validation receipt and governed approval.",
     "",
     workMarker(work.workKey),
     caseMarker(value),
@@ -171,7 +171,7 @@ export class GitHubConnector {
     const issue = normalizeIssue(rawIssue);
     const expectedBody = issueBody(value, work);
     if (
-      issue.title !== `[ChangeMarshal] ${work.title}`
+      issue.title !== `[Hadal] ${work.title}`
       || issue.body !== expectedBody
       || issue.state !== "open"
       || issue.assignee !== login
@@ -205,7 +205,7 @@ export class GitHubConnector {
         work,
         login: mappings.get(work.ownerUrn) as string,
         existing: indexed.get(work.workKey),
-        title: `[ChangeMarshal] ${work.title}`,
+        title: `[Hadal] ${work.title}`,
         body: issueBody(value, work),
       }));
       const projections: Projection[] = [];
@@ -371,7 +371,7 @@ export class GitHubConnector {
       const body = {
         state,
         context: "changemarshal/governed-change",
-        description: allowed ? "ChangeMarshal admission requirements satisfied" : "ChangeMarshal admission requirements are incomplete",
+        description: allowed ? "Hadal admission requirements satisfied" : "Hadal admission requirements are incomplete",
         target_url: targetUrl,
       };
       await this.api.post(`${this.repoPath}/statuses/${encodeURIComponent(headSha)}`, body);

@@ -5,12 +5,19 @@ import { caseContentHash, canonicalize, parseCase } from "./serialization";
 
 const begin = "<!-- CHANGEMARSHAL_CASE_GZIP_BASE64_BEGIN -->";
 const end = "<!-- CHANGEMARSHAL_CASE_GZIP_BASE64_END -->";
+const formerBegin = "<!-- HADAL_CASE_GZIP_BASE64_BEGIN -->";
+const formerEnd = "<!-- HADAL_CASE_GZIP_BASE64_END -->";
 const legacyBegin = "<!-- CUTSET_CASE_GZIP_BASE64_BEGIN -->";
 const legacyEnd = "<!-- CUTSET_CASE_GZIP_BASE64_END -->";
 export const MAX_DATAHUB_DOCUMENT_CHARS = 7_900;
 
 export function caseDocumentTitle(caseKey: string): string {
-  if (!/^[a-f0-9]{24}$/.test(caseKey)) throw new Error("invalid ChangeMarshal case key");
+  if (!/^[a-f0-9]{24}$/.test(caseKey)) throw new Error("invalid Hadal case key");
+  return `Hadal change case ${caseKey}`;
+}
+
+export function formerCaseDocumentTitle(caseKey: string): string {
+  if (!/^[a-f0-9]{24}$/.test(caseKey)) throw new Error("invalid legacy ChangeMarshal case key");
   return `ChangeMarshal change case ${caseKey}`;
 }
 
@@ -20,7 +27,7 @@ export function legacyCaseDocumentTitle(caseKey: string): string {
 }
 
 export function isCaseDocumentTitle(title: unknown, caseKey: string): boolean {
-  return title === caseDocumentTitle(caseKey) || title === legacyCaseDocumentTitle(caseKey);
+  return title === caseDocumentTitle(caseKey) || title === formerCaseDocumentTitle(caseKey) || title === legacyCaseDocumentTitle(caseKey);
 }
 
 export function sealCase(value: ChangeCase): ChangeCase {
@@ -59,7 +66,7 @@ export function renderCaseDocument(value: ChangeCase): string {
 }
 
 export function parseCaseDocument(content: string): ChangeCase {
-  const matches = [[begin, end], [legacyBegin, legacyEnd]].flatMap(([opening, closing]) => {
+  const matches = [[begin, end], [formerBegin, formerEnd], [legacyBegin, legacyEnd]].flatMap(([opening, closing]) => {
     const start = content.indexOf(opening as string);
     const finish = content.indexOf(closing as string);
     return start >= 0
@@ -70,12 +77,12 @@ export function parseCaseDocument(content: string): ChangeCase {
       : [];
   });
   if (matches.length !== 1) {
-    throw new Error("document omitted one unambiguous ChangeMarshal or legacy Cutset case envelope");
+    throw new Error("document omitted one unambiguous Hadal, ChangeMarshal, or Cutset case envelope");
   }
   const match = matches[0] as { opening: string; start: number; finish: number };
   const encoded = content.slice(match.start + match.opening.length, match.finish).trim();
   if (!/^[A-Za-z0-9+/]+={0,2}$/.test(encoded) || encoded.length > MAX_DATAHUB_DOCUMENT_CHARS) {
-    throw new Error("document contains an invalid ChangeMarshal case envelope");
+    throw new Error("document contains an invalid Hadal case envelope");
   }
   try {
     const serialized = gunzipSync(Buffer.from(encoded, "base64"), {
@@ -83,6 +90,6 @@ export function parseCaseDocument(content: string): ChangeCase {
     }).toString("utf8");
     return parseCase(serialized);
   } catch (error) {
-    throw new Error("document contains an unreadable ChangeMarshal case envelope", { cause: error });
+    throw new Error("document contains an unreadable Hadal case envelope", { cause: error });
   }
 }

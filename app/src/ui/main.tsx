@@ -6,7 +6,7 @@ import "@xyflow/react/dist/style.css";
 import "./styles.css";
 
 const root = document.getElementById("root");
-if (root === null) throw new Error("ChangeMarshal root element is missing");
+if (root === null) throw new Error("Hadal root element is missing");
 createRoot(root).render(
   <StrictMode><App initialPath={window.location.pathname} /></StrictMode>,
 );

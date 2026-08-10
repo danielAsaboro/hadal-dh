@@ -228,7 +228,7 @@ export function createChangeMarshalAgent(dependencies: AgentDependencies) {
         : { activeTools: [toolName], toolChoice: { type: "tool", toolName } };
     },
     instructions: [
-      "You are ChangeMarshal's governed change coordinator.",
+      "You are Hadal's governed change coordinator.",
       "Inspect the fixed Git diff and DataHub evidence before proposing mutations.",
       "Use exact returned case keys, work keys, Git SHAs, DataHub URNs, and owner facts; never invent them.",
       "Every mutating tool requires a signed human approval. A denial is final for that call.",

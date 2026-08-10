@@ -29,7 +29,7 @@ function CaseIdentity({ value, onNavigate }: Readonly<{ value: ChangeCase; onNav
 function EmptyCases() {
   return (
     <div role="status" aria-label="Governed case empty state" className="global-empty">
-      <p>No governed ChangeMarshal cases exist in DataHub.</p>
+      <p>No governed Hadal cases exist in DataHub.</p>
       <p>A canonical DataHub change case is required before work can begin.</p>
     </div>
   );
@@ -101,7 +101,7 @@ function CasesPage({ cases, onNavigate }: Readonly<{ cases: readonly ChangeCase[
   const pagination = paginateRows(cases, page);
   return (
     <main className="global-main" aria-labelledby="cases-page-title">
-      <header className="global-heading"><p className="eyebrow">Canonical collection</p><h1 id="cases-page-title" data-page-heading tabIndex={-1}>Governed cases</h1><p>Every row is a real ChangeMarshal case read from DataHub.</p></header>
+      <header className="global-heading"><p className="eyebrow">Canonical collection</p><h1 id="cases-page-title" data-page-heading tabIndex={-1}>Governed cases</h1><p>Every row is a real Hadal case read from DataHub.</p></header>
       {cases.length === 0 ? <EmptyCases /> : (
         <section className="global-table-panel">
           <table aria-label="Governed cases">

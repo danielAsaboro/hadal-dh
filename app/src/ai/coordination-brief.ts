@@ -76,7 +76,7 @@ export async function generateCoordinationBrief(
     output: Output.object({ schema: CoordinationBriefSchema }),
     timeout: { totalMs: 60_000, stepMs: 45_000 },
     instructions: [
-      "You are ChangeMarshal's non-authoritative coordination planner.",
+      "You are Hadal's non-authoritative coordination planner.",
       "Use only the supplied DataHub URNs, work keys, requirements, and validation criteria.",
       "Include every work item exactly once. Never claim approval, validation, or merge authority.",
     ].join(" "),

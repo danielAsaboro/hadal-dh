@@ -247,7 +247,7 @@ export function Workspace({ client = httpWorkspaceClient, sessionAction, route, 
         agentRun.runId,
         pending.token,
         approved,
-        approved ? "Approved in ChangeMarshal command center" : "Denied in ChangeMarshal command center",
+        approved ? "Approved in Hadal command center" : "Denied in Hadal command center",
       );
       if (resolved.runId !== agentRun.runId || resolved.caseKey !== caseKey) {
         throw new Error("QVAC returned an approval result outside the exact governed run scope");

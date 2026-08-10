@@ -77,7 +77,7 @@ function parseMapping(value: string): readonly [string, string] {
 export function buildCli(): Command {
   const program = new Command()
     .name("changemarshal")
-    .description("Govern data changes from DataHub graph evidence through accountable work")
+    .description("Hadal: governed change intelligence from DataHub graph evidence through accountable work")
     .version("0.2.0");
   const cases = program.command("case").description("Plan and coordinate governed change cases");
 
@@ -255,7 +255,7 @@ export function buildCli(): Command {
         });
         // @ai-sdk/tui declares Agent<any,...>, which is contravariantly wider
         // than a no-call-options ToolLoopAgent under exactOptionalPropertyTypes.
-        await runAgentTUI({ title: "ChangeMarshal", agent: agent as AgentTUIAgent, tools: "full", reasoning: "collapsed" });
+        await runAgentTUI({ title: "Hadal", agent: agent as AgentTUIAgent, tools: "full", reasoning: "collapsed" });
       } finally {
         if (qvac !== undefined) await qvac.close();
         await value.client.close();
@@ -280,8 +280,8 @@ export async function main(argv = process.argv): Promise<void> {
     warnLegacyProductEnv();
     await buildCli().parseAsync(argv);
   } catch (error) {
-    const message = error instanceof Error ? error.message : "unknown ChangeMarshal failure";
-    process.stderr.write(`ChangeMarshal failed: ${message}\n`);
+    const message = error instanceof Error ? error.message : "unknown Hadal failure";
+    process.stderr.write(`Hadal failed: ${message}\n`);
     process.exitCode = exitCodeFor(error);
   }
 }

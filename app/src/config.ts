@@ -36,7 +36,7 @@ export function warnLegacyProductEnv(
     .filter((name) => name.startsWith("CUTSET_") && env[name] !== undefined)
     .sort();
   if (names.length > 0) {
-    write(`ChangeMarshal accepted legacy environment variables ${names.join(", ")}; migrate them to the CHANGEMARSHAL_ prefix.\n`);
+    write(`Hadal accepted legacy environment variables ${names.join(", ")}; migrate them to the CHANGEMARSHAL_ prefix.\n`);
   }
 }
 

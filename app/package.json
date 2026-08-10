@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsc --noEmit && vite build",
+    "build": "npm exec -- tsc --noEmit && npm exec -- vite build",
     "cli": "tsx src/cli.ts",
     "dev": "vite",
     "demo": "tsx scripts/governed-demo.ts",
@@ -12,7 +12,7 @@
     "smoke:qvac": "tsx scripts/qvac-smoke.mts",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "npm exec -- tsc --noEmit"
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "^3.0.27",

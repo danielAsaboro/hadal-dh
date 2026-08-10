@@ -83,9 +83,9 @@ export function createServer(dependencies: ServerDependencies): FastifyInstance 
   });
   if (dependencies.uiRoot !== undefined) registerUiStaticRoutes(server, dependencies.uiRoot);
   registerSessionRoutes(server, dependencies.session);
-  server.addHook("onRequest", async (request, reply) => {
-    const pathname = request.url.split("?", 1)[0] ?? "";
-    if (dependencies.session === undefined || !/^\/api\/(cases|agent)(?:\/|$)/.test(pathname)) return;
+  server.addHook("preHandler", async (request, reply) => {
+    const route = request.routeOptions.url;
+    if (dependencies.session === undefined || route === undefined || !/^\/api\/(cases|agent)(?:\/|$)/.test(route)) return;
     await requireSession(request, reply, dependencies.session);
   });
   server.get("/api/health", async () => ({ ok: true, service: "changemarshal" }));

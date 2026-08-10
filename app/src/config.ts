@@ -121,6 +121,13 @@ function integerEnv(value: string | undefined, fallback: number, label: string, 
   return parsed;
 }
 
+function booleanEnv(value: string | undefined, fallback: boolean, label: string): boolean {
+  if (value === undefined) return fallback;
+  if (value === "true") return true;
+  if (value === "false") return false;
+  throw new ConfigError(`${label} must be true or false`);
+}
+
 export function qvacConfigFromEnv(env: Environment = process.env): QvacRuntimeConfig {
   const mode = productEnv(env, "QVAC_MODE") ?? "managed";
   if (mode !== "managed" && mode !== "external") throw new ConfigError("CHANGEMARSHAL_QVAC_MODE must be managed or external");
@@ -143,7 +150,8 @@ export function qvacConfigFromEnv(env: Environment = process.env): QvacRuntimeCo
 export function uiSessionConfigFromEnv(env: Environment = process.env): UiSessionConfig | undefined {
   const passphrase = productEnv(env, "UI_PASSPHRASE");
   const signingSecret = productEnv(env, "UI_SESSION_SECRET");
-  if (passphrase === undefined && signingSecret === undefined) return undefined;
+  const cookieSecure = productEnv(env, "UI_SESSION_COOKIE_SECURE");
+  if (passphrase === undefined && signingSecret === undefined && cookieSecure === undefined) return undefined;
   if (!passphrase || !signingSecret) {
     throw new ConfigError("CHANGEMARSHAL_UI_PASSPHRASE and CHANGEMARSHAL_UI_SESSION_SECRET must be configured together");
   }
@@ -151,6 +159,7 @@ export function uiSessionConfigFromEnv(env: Environment = process.env): UiSessio
     passphrase,
     signingSecret,
     ttlSeconds: integerEnv(productEnv(env, "UI_SESSION_TTL_SECONDS"), 28_800, "CHANGEMARSHAL_UI_SESSION_TTL_SECONDS", 60),
+    secureCookie: booleanEnv(cookieSecure, true, "CHANGEMARSHAL_UI_SESSION_COOKIE_SECURE"),
   };
 }
 

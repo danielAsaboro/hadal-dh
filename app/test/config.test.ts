@@ -133,12 +133,23 @@ describe("runtime configuration", () => {
       passphrase: "operator-passphrase",
       signingSecret: "a signing secret that is long enough for test use",
       ttlSeconds: 28_800,
+      secureCookie: true,
     });
+    expect(uiSessionConfigFromEnv({
+      CHANGEMARSHAL_UI_PASSPHRASE: "operator-passphrase",
+      CHANGEMARSHAL_UI_SESSION_SECRET: "a signing secret that is long enough for test use",
+      CHANGEMARSHAL_UI_SESSION_COOKIE_SECURE: "false",
+    })).toMatchObject({ secureCookie: false });
     expect(() => uiSessionConfigFromEnv({ CHANGEMARSHAL_UI_PASSPHRASE: "operator-passphrase" })).toThrow(/UI_SESSION_SECRET/i);
     expect(() => uiSessionConfigFromEnv({
       CHANGEMARSHAL_UI_PASSPHRASE: "operator-passphrase",
       CHANGEMARSHAL_UI_SESSION_SECRET: "a signing secret that is long enough for test use",
       CHANGEMARSHAL_UI_SESSION_TTL_SECONDS: "0",
     })).toThrow(/UI_SESSION_TTL_SECONDS/i);
+    expect(() => uiSessionConfigFromEnv({
+      CHANGEMARSHAL_UI_PASSPHRASE: "operator-passphrase",
+      CHANGEMARSHAL_UI_SESSION_SECRET: "a signing secret that is long enough for test use",
+      CHANGEMARSHAL_UI_SESSION_COOKIE_SECURE: "yes",
+    })).toThrow(/UI_SESSION_COOKIE_SECURE/i);
   });
 });

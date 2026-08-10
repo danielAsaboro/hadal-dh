@@ -9,6 +9,7 @@ export type UiSessionConfig = Readonly<{
   passphrase: string;
   signingSecret: string;
   ttlSeconds: number;
+  secureCookie: boolean;
 }>;
 
 const sessionBody = z.object({ passphrase: z.string().min(1).max(1_024) }).strict();
@@ -27,8 +28,8 @@ function issueToken(config: UiSessionConfig, now = Date.now()): string {
   return `${payload}.${digest(payload, config.signingSecret).toString("base64url")}`;
 }
 
-function sessionCookie(token: string, maxAge: number): string {
-  return `${SESSION_COOKIE_NAME}=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${maxAge}`;
+function sessionCookie(token: string, maxAge: number, secure: boolean): string {
+  return `${SESSION_COOKIE_NAME}=${token}; Path=/; HttpOnly;${secure ? " Secure;" : ""} SameSite=Strict; Max-Age=${maxAge}`;
 }
 
 function cookieValue(request: FastifyRequest): string | undefined {
@@ -74,8 +75,8 @@ export function registerSessionRoutes(server: FastifyInstance, config: UiSession
     if (config === undefined) return await reply.status(404).send({ error: "session_not_configured" });
     const { passphrase } = sessionBody.parse(request.body);
     if (!hasMatchingPassphrase(passphrase, config)) return await reply.status(401).send({ error: "unauthorized" });
-    return await reply.header("Set-Cookie", sessionCookie(issueToken(config), config.ttlSeconds)).status(204).send();
+    return await reply.header("Set-Cookie", sessionCookie(issueToken(config), config.ttlSeconds, config.secureCookie)).status(204).send();
   });
   server.delete("/api/session", async (_request, reply) =>
-    await reply.header("Set-Cookie", sessionCookie("", 0)).status(204).send());
+    await reply.header("Set-Cookie", sessionCookie("", 0, config?.secureCookie ?? true)).status(204).send());
 }

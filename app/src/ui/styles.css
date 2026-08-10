@@ -438,6 +438,9 @@ code, .sha, dd { font-family: "SFMono-Regular", Consolas, "Liberation Mono", mon
   right: 0;
   display: grid;
   width: min(100%, 440px);
+  max-height: min(480px, calc(100vh - 120px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
   border: 2px solid var(--ink);
   border-radius: 12px;
   background: var(--paper);
@@ -862,7 +865,7 @@ code, .sha, dd { font-family: "SFMono-Regular", Consolas, "Liberation Mono", mon
   .mobile-workspace-menu .rail-foot { margin-top: 8px; padding: 8px; border-radius: 10px; background: var(--ink); }
   .mobile-workspace-menu .rail-session { padding: 8px 0 0; }
   .mobile-workspace-menu .rail-sign-out { max-width: 220px; }
-  .case-picker-results { position: static; grid-column: 1 / -1; width: 100%; margin-top: 2px; box-shadow: none; }
+  .case-picker-results { position: static; grid-column: 1 / -1; width: 100%; max-height: none; margin-top: 2px; overflow: visible; overscroll-behavior: auto; box-shadow: none; }
   .case-main { padding: 30px 20px 58px; }
   .global-main { padding: 34px 20px 58px; }
   .flow-grid { grid-template-columns: 1fr; }

@@ -98,6 +98,19 @@ describe("workspace operational selectors", () => {
     expect(new Set(result.map((row) => row.case.caseKey)).size).toBe(result.length);
   });
 
+  it("orders offset timestamps by their real instant rather than their serialized text", () => {
+    expect(typeof selectors.selectAttentionCases).toBe("function");
+    if (selectors.selectAttentionCases === undefined) return;
+
+    const earlierInstant = { ...governedCase("offset-earlier", "2026-08-09T10:00:00+10:00"), state: "stale" as const };
+    const laterInstant = { ...governedCase("offset-later", "2026-08-09T02:00:00Z"), state: "stale" as const };
+
+    const result = selectors.selectAttentionCases([earlierInstant, laterInstant]);
+
+    expect(result.map((row) => row.case.change.modelName)).toEqual(["offset-later", "offset-earlier"]);
+    expect(result.map((row) => row.latestAt)).toEqual(["2026-08-09T02:00:00Z", "2026-08-09T10:00:00+10:00"]);
+  });
+
   it("flattens real work and approval facts and paginates every collection at twenty-five rows", () => {
     expect(typeof selectors.selectWorkRows).toBe("function");
     expect(typeof selectors.selectApprovalRows).toBe("function");

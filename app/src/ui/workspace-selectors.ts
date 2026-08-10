@@ -45,7 +45,12 @@ function realTimestamps(value: ChangeCase): readonly string[] {
 }
 
 export function latestCaseTimestamp(value: ChangeCase): string {
-  return realTimestamps(value).reduce((latest, timestamp) => timestamp > latest ? timestamp : latest, value.createdAt);
+  return realTimestamps(value).reduce((latest, timestamp) => {
+    const instantDifference = Date.parse(timestamp) - Date.parse(latest);
+    return instantDifference > 0 || (instantDifference === 0 && timestamp.localeCompare(latest) > 0)
+      ? timestamp
+      : latest;
+  }, value.createdAt);
 }
 
 function hasMissingHumanDecision(value: ChangeCase): boolean {
@@ -80,7 +85,7 @@ const attentionOrder: Record<AttentionCategory, number> = {
 };
 
 function newestFirst(left: Readonly<{ latestAt: string; case: ChangeCase }>, right: Readonly<{ latestAt: string; case: ChangeCase }>): number {
-  return right.latestAt.localeCompare(left.latestAt) || left.case.caseKey.localeCompare(right.case.caseKey);
+  return Date.parse(right.latestAt) - Date.parse(left.latestAt) || left.case.caseKey.localeCompare(right.case.caseKey);
 }
 
 export function selectAttentionCases(cases: readonly ChangeCase[]): readonly AttentionCase[] {

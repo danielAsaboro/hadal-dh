@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { Profiler } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { AgentRunSnapshot } from "../../src/ai/run-events";
@@ -8,6 +9,7 @@ import { compileCase } from "../../src/domain/compile-case";
 import { App, type WorkspaceClient } from "../../src/ui/App";
 import { StatePill } from "../../src/ui/CaseSections";
 import { StatusIndicator, type OperationalStatus } from "../../src/ui/StatusIndicator";
+import { Workspace } from "../../src/ui/Workspace";
 
 class TestResizeObserver implements ResizeObserver {
   readonly observe = () => undefined;
@@ -225,6 +227,36 @@ describe("ChangeMarshal coordination workspace", () => {
 
     expect(listCases).toHaveBeenCalledTimes(1);
     expect(screen.getByRole("status", { name: /canonical DataHub context/i }).textContent).toMatch(/DataHub canonical/i);
+  });
+
+  it("renders the exact routed case synchronously without exposing retained case data", async () => {
+    const first = caseValue({ modelName: "customers", repository: "acme/warehouse" });
+    const second = caseValue({ modelName: "campaigns", repository: "acme/marketing", consumerName: "attribution" });
+    const missingCaseKey = "0123456789abcdef01234567";
+    const client = clientFor(first, { listCases: async () => [first, second] });
+    const commits: string[] = [];
+    const renderRoute = (caseKey: string) => (
+      <Profiler id="routed-workspace" onRender={() => commits.push(document.body.textContent ?? "")}>
+        <Workspace
+          client={client}
+          route={{ kind: "case", caseKey, page: "overview" }}
+          onNavigate={() => undefined}
+        />
+      </Profiler>
+    );
+
+    const rendered = render(renderRoute(first.caseKey));
+    await screen.findByRole("heading", { name: /customers governed change/i });
+
+    commits.length = 0;
+    rendered.rerender(renderRoute(second.caseKey));
+    expect(commits.some((content) => content.includes("customers governed change"))).toBe(false);
+    expect(screen.getByRole("heading", { name: /campaigns governed change/i })).not.toBeNull();
+
+    commits.length = 0;
+    rendered.rerender(renderRoute(missingCaseKey));
+    expect(commits.some((content) => content.includes("campaigns governed change"))).toBe(false);
+    expect(screen.getByRole("heading", { name: /case not found/i })).not.toBeNull();
   });
 
   it("bounds the global case table to twenty-five real rows per page", async () => {

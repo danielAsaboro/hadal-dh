@@ -77,7 +77,7 @@ export function Workspace({ client = httpWorkspaceClient, sessionAction, route, 
   onNavigate: (destination: string) => void;
 }>) {
   const [cases, setCases] = useState<readonly ChangeCase[]>([]);
-  const [current, setCurrent] = useState<ChangeCase>();
+  const [retainedCase, setRetainedCase] = useState<ChangeCase>();
   const [loading, setLoading] = useState(true);
   const [caseLoadError, setCaseLoadError] = useState<string>();
   const [caseLoadKey, setCaseLoadKey] = useState(0);
@@ -93,7 +93,7 @@ export function Workspace({ client = httpWorkspaceClient, sessionAction, route, 
     void client.listCases().then((values) => {
       if (!active) return;
       setCases(values);
-      setCurrent(route.kind === "case" ? values.find((item) => item.caseKey === route.caseKey) : values[0]);
+      setRetainedCase(values[0]);
       setCaseLoadError(undefined);
       setLoading(false);
     }).catch((caught: unknown) => {
@@ -104,10 +104,9 @@ export function Workspace({ client = httpWorkspaceClient, sessionAction, route, 
     return () => { active = false; };
   }, [caseLoadKey, client]);
 
-  useEffect(() => {
-    if (route.kind !== "case" || loading) return;
-    setCurrent(cases.find((item) => item.caseKey === route.caseKey));
-  }, [cases, loading, route, route.kind]);
+  const current = route.kind === "case"
+    ? cases.find((item) => item.caseKey === route.caseKey)
+    : retainedCase;
 
   useEffect(() => {
     let active = true;
@@ -123,7 +122,7 @@ export function Workspace({ client = httpWorkspaceClient, sessionAction, route, 
   }, [client, healthKey]);
 
   const updateCase = (value: ChangeCase) => {
-    setCurrent(value);
+    setRetainedCase(value);
     setCases((existing) => existing.map((item) => item.caseKey === value.caseKey ? value : item));
   };
 
@@ -144,7 +143,7 @@ export function Workspace({ client = httpWorkspaceClient, sessionAction, route, 
     setError(undefined);
     try {
       const selected = await client.getCase(caseKey);
-      setCurrent(selected);
+      setRetainedCase(selected);
       setCases((existing) => existing.map((item) => item.caseKey === selected.caseKey ? selected : item));
       onNavigate(`/workspace/cases/${selected.caseKey}/overview`);
     } catch (caught) {
@@ -182,7 +181,7 @@ export function Workspace({ client = httpWorkspaceClient, sessionAction, route, 
       ));
       const reread = await client.getCase(runCase.caseKey);
       setCases((existing) => existing.map((item) => item.caseKey === reread.caseKey ? reread : item));
-      setCurrent((selected) => selected?.caseKey === reread.caseKey ? reread : selected);
+      setRetainedCase((selected) => selected?.caseKey === reread.caseKey ? reread : selected);
     } catch (caught) {
       setError(messageFrom(caught, "Agent approval did not complete"));
     } finally {

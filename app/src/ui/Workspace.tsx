@@ -59,9 +59,11 @@ function messageFrom(caught: unknown, fallback: string): string {
   return caught instanceof Error ? caught.message : fallback;
 }
 
-export function Workspace({ client = httpWorkspaceClient, sessionAction }: Readonly<{
+export function Workspace({ client = httpWorkspaceClient, sessionAction, requestedCaseKey, onNavigateToCase }: Readonly<{
   client?: WorkspaceClient;
   sessionAction?: RailSessionAction;
+  requestedCaseKey?: string;
+  onNavigateToCase?: (caseKey: string) => void;
 }>) {
   const [cases, setCases] = useState<readonly ChangeCase[]>([]);
   const [current, setCurrent] = useState<ChangeCase>();
@@ -80,7 +82,7 @@ export function Workspace({ client = httpWorkspaceClient, sessionAction }: Reado
     void client.listCases().then((values) => {
       if (!active) return;
       setCases(values);
-      setCurrent(values[0]);
+      setCurrent(requestedCaseKey === undefined ? values[0] : values.find((item) => item.caseKey === requestedCaseKey));
       setCaseLoadError(undefined);
       setLoading(false);
     }).catch((caught: unknown) => {
@@ -90,6 +92,11 @@ export function Workspace({ client = httpWorkspaceClient, sessionAction }: Reado
     });
     return () => { active = false; };
   }, [caseLoadKey, client]);
+
+  useEffect(() => {
+    if (requestedCaseKey === undefined || loading) return;
+    setCurrent(cases.find((item) => item.caseKey === requestedCaseKey));
+  }, [cases, loading, requestedCaseKey]);
 
   useEffect(() => {
     let active = true;
@@ -125,7 +132,9 @@ export function Workspace({ client = httpWorkspaceClient, sessionAction }: Reado
     setBusy("case");
     setError(undefined);
     try {
-      setCurrent(await client.getCase(caseKey));
+      const selected = await client.getCase(caseKey);
+      setCurrent(selected);
+      onNavigateToCase?.(selected.caseKey);
     } catch (caught) {
       setError(messageFrom(caught, "Case selection failed without a verified DataHub reread"));
     } finally {
@@ -188,6 +197,14 @@ export function Workspace({ client = httpWorkspaceClient, sessionAction }: Reado
     );
   }
   if (current === undefined) {
+    if (requestedCaseKey !== undefined && cases.length > 0) {
+      return (
+        <main className="center-state" aria-labelledby="case-not-found-title">
+          <h1 id="case-not-found-title">Case not found</h1>
+          <p>The requested governed case is not available from the canonical DataHub case collection.</p>
+        </main>
+      );
+    }
     return (
       <main className="center-state">
         <div role="status" aria-label="Governed case empty state">

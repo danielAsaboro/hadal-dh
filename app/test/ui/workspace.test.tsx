@@ -195,6 +195,60 @@ describe("ChangeMarshal coordination workspace", () => {
     expect(listCases).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps a direct nested case page behind the configured session gate", async () => {
+    const value = caseValue();
+    const listCases = vi.fn(async () => [value]);
+    const client = clientFor(value, { listCases });
+    const sessionClient = { ...localSessionClient, read: async () => ({ configured: true, authenticated: false }) };
+
+    render(<App client={client} sessionClient={sessionClient} initialPath={`/workspace/cases/${value.caseKey}/graph`} />);
+
+    expect(await screen.findByRole("heading", { name: /operator sign-in/i })).not.toBeNull();
+    expect(listCases).not.toHaveBeenCalled();
+  });
+
+  it("replaces a bare case URL with its overview URL", async () => {
+    const value = caseValue();
+    window.history.replaceState({}, "", `/workspace/cases/${value.caseKey}`);
+
+    render(<App client={clientFor(value)} sessionClient={localSessionClient} initialPath={`/workspace/cases/${value.caseKey}`} />);
+
+    await screen.findByRole("heading", { name: /customers governed change/i });
+    expect(window.location.pathname).toBe(`/workspace/cases/${value.caseKey}/overview`);
+  });
+
+  it("preserves query and anchor state while replacing a bare case URL", async () => {
+    const value = caseValue();
+    window.history.replaceState({}, "", `/workspace/cases/${value.caseKey}?source=notification#work`);
+
+    render(<App client={clientFor(value)} sessionClient={localSessionClient} initialPath={`/workspace/cases/${value.caseKey}`} />);
+
+    await screen.findByRole("heading", { name: /customers governed change/i });
+    expect(window.location.href).toContain(`/workspace/cases/${value.caseKey}/overview?source=notification#work`);
+  });
+
+  it("renders an explicit public not-found state instead of the landing page", () => {
+    render(<App client={clientFor(caseValue())} sessionClient={localSessionClient} initialPath="/pricing" />);
+
+    expect(screen.getByRole("heading", { name: /public page not found/i })).not.toBeNull();
+    expect(screen.queryByRole("heading", { name: /turn graph evidence/i })).toBeNull();
+  });
+
+  it("renders an explicit missing-case state without loading a different case", async () => {
+    const current = caseValue({ modelName: "customers" });
+    const missingCaseKey = "0123456789abcdef01234567";
+    const listCases = vi.fn(async () => [current]);
+    render(<App
+      client={clientFor(current, { listCases })}
+      sessionClient={localSessionClient}
+      initialPath={`/workspace/cases/${missingCaseKey}/overview`}
+    />);
+
+    expect(await screen.findByRole("heading", { name: /case not found/i })).not.toBeNull();
+    expect(screen.queryByRole("heading", { name: /customers governed change/i })).toBeNull();
+    expect(listCases).toHaveBeenCalledTimes(1);
+  });
+
   it("gates configured unauthenticated workspaces with an accessible password form", async () => {
     const value = caseValue();
     const listCases = vi.fn(async () => [value]);
@@ -487,6 +541,7 @@ describe("ChangeMarshal coordination workspace", () => {
 
     fireEvent.click(campaignButton);
     await screen.findByRole("heading", { name: /campaigns governed change/i });
+    expect(window.location.pathname).toBe(`/workspace/cases/${campaigns.caseKey}/overview`);
     expect(customerButton.getAttribute("aria-pressed")).toBe("false");
     expect(campaignButton.getAttribute("aria-pressed")).toBe("true");
   });

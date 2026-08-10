@@ -36,4 +36,24 @@ describe("production UI static routes", () => {
       await rm(uiRoot, { recursive: true, force: true });
     }
   });
+
+  it("serves the index shell for direct nested workspace navigation without intercepting APIs", async () => {
+    const uiRoot = await mkdtemp(join(tmpdir(), "changemarshal-ui-"));
+    const shell = "<!doctype html><html><body><main>ChangeMarshal UI shell</main></body></html>";
+    await writeFile(join(uiRoot, "index.html"), shell, "utf8");
+    const server = createServer({ application: application(), github: () => ({}) as never, uiRoot });
+
+    try {
+      const nested = await server.inject({ method: "GET", url: "/workspace/cases/a1b2c3d4e5f60718293a4b5c/graph" });
+      const health = await server.inject({ method: "GET", url: "/api/health" });
+
+      expect(nested.statusCode).toBe(200);
+      expect(nested.headers["content-type"]).toMatch(/^text\/html/);
+      expect(nested.body).toBe(shell);
+      expect(health.json()).toEqual({ ok: true, service: "changemarshal" });
+    } finally {
+      await server.close();
+      await rm(uiRoot, { recursive: true, force: true });
+    }
+  });
 });

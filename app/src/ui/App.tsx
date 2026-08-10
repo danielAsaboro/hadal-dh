@@ -1,13 +1,12 @@
 import { useEffect, useState } from "react";
 
 import { LandingPage } from "./LandingPage";
+import { parseAppRoute, type AppRoute } from "./routes";
 import { SignInPage } from "./SignInPage";
 import { httpSessionClient, type SessionClient, type SessionState } from "./session-client";
 import { Workspace, httpWorkspaceClient, type WorkspaceClient } from "./Workspace";
 
 export { httpWorkspaceClient, type WorkspaceClient } from "./Workspace";
-
-type AppPath = "/" | "/workspace";
 
 interface AppProps {
   readonly client?: WorkspaceClient;
@@ -15,13 +14,27 @@ interface AppProps {
   readonly initialPath?: string;
 }
 
-function appPath(pathname: string): AppPath {
-  return pathname === "/workspace" ? "/workspace" : "/";
+function routeAt(pathname: string): Exclude<AppRoute, { kind: "case-redirect" }> {
+  const route = parseAppRoute(pathname);
+  if (route.kind !== "case-redirect") return route;
+  window.history.replaceState(window.history.state, "", `${route.destination}${window.location.search}${window.location.hash}`);
+  return { kind: "case", caseKey: route.caseKey, page: "overview" };
 }
 
-function WorkspaceGate({ client, sessionClient }: {
+function NotFound({ workspace }: { readonly workspace: boolean }) {
+  return (
+    <main className="center-state" aria-labelledby="not-found-title">
+      <h1 id="not-found-title">{workspace ? "Workspace page not found" : "Public page not found"}</h1>
+      <p>{workspace ? "This governed workspace route is not available." : "This public route is not available."}</p>
+    </main>
+  );
+}
+
+function WorkspaceGate({ client, sessionClient, route, onNavigate }: {
   readonly client: WorkspaceClient;
   readonly sessionClient: SessionClient;
+  readonly route: Exclude<AppRoute, { kind: "landing" | "public-not-found" | "case-redirect" }>;
+  readonly onNavigate: (destination: string) => void;
 }) {
   const [session, setSession] = useState<SessionState>();
   const [error, setError] = useState<string>();
@@ -66,6 +79,7 @@ function WorkspaceGate({ client, sessionClient }: {
   if (!session.authenticated) {
     return <main className="center-state"><p role="alert">Session verification failed. Unauthenticated local access was rejected.</p></main>;
   }
+  if (route.kind === "workspace-not-found") return <NotFound workspace />;
   const signOut = async () => {
     setSignOutBusy(true);
     setSignOutError(undefined);
@@ -83,6 +97,8 @@ function WorkspaceGate({ client, sessionClient }: {
       {!session.configured && <p className="local-session-label" role="status">Local operator session · authentication not configured</p>}
       <Workspace
         client={client}
+        {...(route.kind === "case" ? { requestedCaseKey: route.caseKey } : {})}
+        onNavigateToCase={(caseKey) => onNavigate(`/workspace/cases/${caseKey}/${route.kind === "case" ? route.page : "overview"}`)}
         {...(session.configured ? {
           sessionAction: {
             busy: signOutBusy,
@@ -100,19 +116,20 @@ export function App({
   sessionClient = httpSessionClient,
   initialPath,
 }: AppProps) {
-  const [path, setPath] = useState<AppPath>(() => appPath(initialPath ?? window.location.pathname));
+  const [route, setRoute] = useState(() => routeAt(initialPath ?? window.location.pathname));
 
   useEffect(() => {
-    const onPopState = () => setPath(appPath(window.location.pathname));
+    const onPopState = () => setRoute(routeAt(window.location.pathname));
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
   }, []);
 
-  const navigate = (destination: AppPath) => {
+  const navigate = (destination: string) => {
     window.history.pushState({}, "", destination);
-    setPath(destination);
+    setRoute(routeAt(destination));
   };
 
-  if (path === "/") return <LandingPage onEnterWorkspace={() => navigate("/workspace")} />;
-  return <WorkspaceGate client={client} sessionClient={sessionClient} />;
+  if (route.kind === "landing") return <LandingPage onEnterWorkspace={() => navigate("/workspace")} />;
+  if (route.kind === "public-not-found") return <NotFound workspace={false} />;
+  return <WorkspaceGate client={client} sessionClient={sessionClient} route={route} onNavigate={navigate} />;
 }

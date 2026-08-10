@@ -1,6 +1,8 @@
 import { useState, type ReactNode } from "react";
 
 import type { AgentRunEvent } from "../ai/run-events";
+import { Button } from "./components/ui/Button";
+import { Icons } from "./icons";
 
 const eventPageSize = 25;
 
@@ -19,9 +21,9 @@ export function BoundedAgentEvents({ events, label, className, renderEvent }: Re
       <ol className={className} aria-label={label}>{rows.map(renderEvent)}</ol>
       {pageCount > 1 && (
         <div className="pagination-bar case-pagination agent-event-pagination">
-          <button disabled={page === 1} onClick={() => setPage(page - 1)}>Previous {label} page</button>
+          <Button variant="secondary" size="sm" disabled={page === 1} onClick={() => setPage(page - 1)}><Icons.arrowLeft aria-hidden="true" size={15} /> Previous</Button>
           <span role="status" aria-label={`${label} pagination`}>Page {page} of {pageCount} · {events.length} events</span>
-          <button disabled={page === pageCount} onClick={() => setPage(page + 1)}>Next {label} page</button>
+          <Button variant="secondary" size="sm" disabled={page === pageCount} onClick={() => setPage(page + 1)}>Next <Icons.arrowRight aria-hidden="true" size={15} /></Button>
         </div>
       )}
     </>

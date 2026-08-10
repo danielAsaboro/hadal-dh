@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 
 import { LandingPage } from "./LandingPage";
+import { Button } from "./components/ui/Button";
+import { Icons } from "./icons";
 import { parseAppRoute, type AppRoute } from "./routes";
 import { SignInPage } from "./SignInPage";
 import { httpSessionClient, type SessionClient, type SessionState } from "./session-client";
@@ -60,7 +62,7 @@ function WorkspaceGate({ client, sessionClient, route, onNavigate }: {
       <main className="center-state">
         <div role="alert">
           <p>Session verification failed. {error}</p>
-          <button onClick={() => setReadKey((value) => value + 1)}>Retry session check</button>
+          <Button variant="secondary" onClick={() => setReadKey((value) => value + 1)}><Icons.refresh aria-hidden="true" size={16} /> Retry session check</Button>
         </div>
       </main>
     );
@@ -123,6 +125,10 @@ export function App({
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
   }, []);
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [route]);
 
   const navigate = (destination: string) => {
     window.history.pushState({}, "", destination);

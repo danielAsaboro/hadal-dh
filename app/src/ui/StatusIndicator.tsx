@@ -1,3 +1,5 @@
+import { Icons } from "./icons";
+
 export type OperationalStatus = "verified" | "active" | "waiting" | "blocked" | "failed" | "unavailable";
 
 const presentation: Record<OperationalStatus, Readonly<{ label: string; icon: string }>> = {
@@ -14,6 +16,19 @@ export function statusPresentation(status: OperationalStatus): Readonly<{ status
   return { statusLabel: value.label, statusIcon: value.icon };
 }
 
+export function OperationalStatusIcon({ status, size = 14 }: Readonly<{ status: OperationalStatus; size?: number }>) {
+  const Icon = status === "verified"
+    ? Icons.verified
+    : status === "active"
+      ? Icons.activity
+      : status === "waiting"
+        ? Icons.waiting
+        : status === "failed"
+          ? Icons.failed
+          : Icons.warning;
+  return <Icon aria-hidden="true" size={size} strokeWidth={2} />;
+}
+
 export function StatusIndicator({ status, className = "" }: Readonly<{
   status: OperationalStatus;
   className?: string;
@@ -25,7 +40,7 @@ export function StatusIndicator({ status, className = "" }: Readonly<{
       role="img"
       aria-label={`${value.label} status`}
     >
-      <span aria-hidden="true">{value.icon}</span> {value.label}
+      <OperationalStatusIcon status={status} /> {value.label}
     </span>
   );
 }

@@ -11,6 +11,7 @@ import {
   StatePill,
 } from "./CaseSections";
 import { GovernedAgentPanel, type AgentHealthState, type AgentRunRehydrationState } from "./GovernedAgentPanel";
+import { Icons } from "./icons";
 import { casePages, type CasePage as CasePageName } from "./routes";
 
 const GraphPage = lazy(() => import("./GraphPage"));
@@ -23,6 +24,15 @@ const pageLabels: Readonly<Record<CasePageName, string>> = {
   run: "Run",
   history: "History",
 };
+
+const pageIcons = {
+  overview: Icons.activity,
+  graph: Icons.graph,
+  work: Icons.work,
+  approvals: Icons.approvals,
+  run: Icons.bot,
+  history: Icons.history,
+} satisfies Readonly<Record<CasePageName, typeof Icons.activity>>;
 
 function CaseIdentity({ value, cases, page, busy, onNavigate, onOpenCase }: Readonly<{
   value: ChangeCase;
@@ -62,16 +72,18 @@ function CaseIdentity({ value, cases, page, busy, onNavigate, onOpenCase }: Read
       </header>
 
       <nav className="case-sections" aria-label="Case pages">
-        {casePages.map((target) => (
-          <WorkspaceLink
+        {casePages.map((target) => {
+          const Icon = pageIcons[target];
+          return <WorkspaceLink
             current={page === target}
             destination={`/workspace/cases/${value.caseKey}/${target}`}
             key={target}
             onNavigate={onNavigate}
           >
+            <Icon aria-hidden="true" size={15} strokeWidth={1.8} />
             {pageLabels[target]}
-          </WorkspaceLink>
-        ))}
+          </WorkspaceLink>;
+        })}
       </nav>
     </section>
   );

@@ -9,7 +9,10 @@ import {
   type ProjectionDefect,
 } from "../domain/policy-evidence";
 import { BoundedAgentEvents } from "./BoundedAgentEvents";
-import { statusPresentation, type OperationalStatus } from "./StatusIndicator";
+import { Badge } from "./components/ui/Badge";
+import { Button } from "./components/ui/Button";
+import { Icons } from "./icons";
+import { OperationalStatusIcon, statusPresentation, type OperationalStatus } from "./StatusIndicator";
 
 const pageSize = 25;
 
@@ -49,14 +52,14 @@ export function StatePill({ value }: { readonly value: string }) {
   const text = value.replaceAll("_", " ");
   const state = operationalState[value];
   const className = `state-pill state-${value.replaceAll("_", "-")}`;
-  if (state === undefined) return <span className={className}>{text}</span>;
-  const { statusLabel, statusIcon } = statusPresentation(state);
+  if (state === undefined) return <Badge className={className}>{text}</Badge>;
+  const { statusLabel } = statusPresentation(state);
   const label = `${text.charAt(0).toUpperCase()}${text.slice(1)}`;
   return (
-    <span className={`${className} state-family-${state}`} role="img" aria-label={`${label}: ${statusLabel} status`}>
-      <span aria-hidden="true">{statusIcon}</span>
+    <Badge variant={state} className={`${className} state-family-${state}`} role="img" aria-label={`${label}: ${statusLabel} status`}>
+      <OperationalStatusIcon status={state} size={13} />
       <span>{text}</span>
-    </span>
+    </Badge>
   );
 }
 
@@ -88,9 +91,9 @@ function PagePagination({ page, pageCount, total, label, onPage }: Readonly<{
 }>) {
   return (
     <div className="pagination-bar case-pagination">
-      <button disabled={page === 1} onClick={() => onPage(page - 1)}>Previous page</button>
+      <Button variant="secondary" size="sm" disabled={page === 1} onClick={() => onPage(page - 1)}><Icons.arrowLeft aria-hidden="true" size={15} /> Previous</Button>
       <span role="status" aria-label={`${label} pagination`}>Page {page} of {pageCount} · {total} rows</span>
-      <button disabled={page === pageCount} onClick={() => onPage(page + 1)}>Next page</button>
+      <Button variant="secondary" size="sm" disabled={page === pageCount} onClick={() => onPage(page + 1)}>Next <Icons.arrowRight aria-hidden="true" size={15} /></Button>
     </div>
   );
 }
@@ -155,11 +158,11 @@ export function CaseOverview({ value, busy, actionStatus, onSync, onReconcile, o
     <div className="case-page case-overview-page">
       <span className="sr-only" role="status" aria-label="Case action status" aria-live="polite">{actionStatus}</span>
       <section className="command-bar" aria-label="Case actions" aria-busy={busy !== undefined}>
-        <button disabled={busy !== undefined} onClick={onSync}>{busy === "sync" ? "Syncing owner work…" : "Sync owner work"}</button>
-        <button disabled={busy !== undefined} onClick={onReconcile}>{busy === "reconcile" ? "Reconciling GitHub…" : "Reconcile GitHub"}</button>
-        <button className="primary-action" disabled={busy !== undefined} onClick={onEvaluate}>
+        <Button variant="secondary" disabled={busy !== undefined} onClick={onSync}><Icons.refresh aria-hidden="true" size={16} />{busy === "sync" ? "Syncing owner work…" : "Sync owner work"}</Button>
+        <Button variant="secondary" disabled={busy !== undefined} onClick={onReconcile}><Icons.repository aria-hidden="true" size={16} />{busy === "reconcile" ? "Reconciling GitHub…" : "Reconcile GitHub"}</Button>
+        <Button variant="primary" className="primary-action" disabled={busy !== undefined} onClick={onEvaluate}><Icons.shield aria-hidden="true" size={16} />
           {busy === "decide" ? "Verifying…" : "Evaluate merge"}
-        </button>
+        </Button>
       </section>
 
       <section className="stage-summary" aria-labelledby="case-stage-summary-title">

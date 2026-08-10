@@ -4,6 +4,9 @@ import type { AgentRunSnapshot } from "../ai/run-events";
 import type { DurableAgentRun } from "../domain/agent-audit";
 import type { ChangeCase } from "../domain/case";
 import { BoundedAgentEvents } from "./BoundedAgentEvents";
+import { Button } from "./components/ui/Button";
+import { Textarea } from "./components/ui/Textarea";
+import { Icons } from "./icons";
 import { StatusIndicator } from "./StatusIndicator";
 
 export type AgentHealth = Readonly<{ available: true; provider: "qvac"; modelId: string; managed: boolean }>;
@@ -60,18 +63,20 @@ export function GovernedAgentPanel({
             <StatusIndicator status="unavailable" />
             <h2>QVAC runtime unavailable</h2>
             <p>Unavailable. {health.message}. Coordination remains disabled until a verified health check succeeds.</p>
-            <button disabled={busy !== undefined} onClick={onRetryHealth}>Retry QVAC health check</button>
+            <Button variant="secondary" disabled={busy !== undefined} onClick={onRetryHealth}><Icons.refresh aria-hidden="true" size={16} /> Retry QVAC health check</Button>
           </div>
         )}
-        <textarea aria-label="QVAC coordination request" value={prompt} onChange={(event) => setPrompt(event.target.value)} rows={3} />
+        <Textarea aria-label="QVAC coordination request" value={prompt} onChange={(event) => setPrompt(event.target.value)} rows={3} />
       </div>
-      <button
+      <Button
+        variant="primary"
         className="agent-run-button"
         disabled={busy !== undefined || !healthAvailable || resumeBlocked || prompt.trim().length === 0}
         onClick={() => onRun(prompt)}
       >
+        <Icons.play aria-hidden="true" size={16} />
         {busy === "agent" ? "Running real model…" : "Run QVAC coordinator"}
-      </button>
+      </Button>
       {rehydration?.status === "loading" && (
         <div className="agent-rehydration-state" role="status">
           <StatusIndicator status="active" />
@@ -119,8 +124,8 @@ export function GovernedAgentPanel({
             </p>
           </div>
           <div className="agent-approval-buttons">
-            <button disabled={busy !== undefined} onClick={() => onResolveApproval(false)}>Deny {pending.toolName}</button>
-            <button className="primary-action" disabled={busy !== undefined} onClick={() => onResolveApproval(true)}>Approve {pending.toolName}</button>
+            <Button variant="destructive" disabled={busy !== undefined} onClick={() => onResolveApproval(false)}><Icons.close aria-hidden="true" size={16} /> Deny {pending.toolName}</Button>
+            <Button variant="primary" className="primary-action" disabled={busy !== undefined} onClick={() => onResolveApproval(true)}><Icons.check aria-hidden="true" size={16} /> Approve {pending.toolName}</Button>
           </div>
         </div>
       )}

@@ -1,6 +1,9 @@
 import { useState, type MouseEvent, type ReactNode } from "react";
 
 import type { ChangeCase } from "../domain/case";
+import { Button } from "./components/ui/Button";
+import { Input } from "./components/ui/Input";
+import { Icons } from "./icons";
 import type { AppRoute, WorkspacePage } from "./routes";
 import { caseMatchesQuery, WORKSPACE_PAGE_SIZE } from "./workspace-selectors";
 
@@ -33,11 +36,11 @@ export function WorkspaceLink({ destination, onNavigate, children, className, cu
   );
 }
 
-const destinations: readonly Readonly<{ page: WorkspacePage; label: string; href: string }>[] = [
-  { page: "home", label: "Home", href: "/workspace" },
-  { page: "cases", label: "Cases", href: "/workspace/cases" },
-  { page: "work", label: "Work", href: "/workspace/work" },
-  { page: "approvals", label: "Approvals", href: "/workspace/approvals" },
+const destinations: readonly Readonly<{ page: WorkspacePage; label: string; href: string; icon: typeof Icons.home }>[] = [
+  { page: "home", label: "Home", href: "/workspace", icon: Icons.home },
+  { page: "cases", label: "Cases", href: "/workspace/cases", icon: Icons.cases },
+  { page: "work", label: "Work", href: "/workspace/work", icon: Icons.work },
+  { page: "approvals", label: "Approvals", href: "/workspace/approvals", icon: Icons.approvals },
 ];
 
 function currentPage(route: Exclude<AppRoute, { kind: "landing" | "public-not-found" | "case-redirect" }>): WorkspacePage | undefined {
@@ -54,18 +57,19 @@ function Navigation({ route, onNavigate, label }: Readonly<{
   const active = currentPage(route);
   return (
     <nav aria-label={label}>
-      {destinations.map((destination) => (
-        <WorkspaceLink
+      {destinations.map((destination) => {
+        const Icon = destination.icon;
+        return <WorkspaceLink
           className="app-nav-link"
           current={active === destination.page}
           destination={destination.href}
           key={destination.page}
           onNavigate={onNavigate}
         >
-          <span aria-hidden="true">{destination.page === "home" ? "⌂" : destination.page === "cases" ? "◇" : destination.page === "work" ? "◆" : "✓"}</span>
-          {destination.label}
-        </WorkspaceLink>
-      ))}
+          <Icon aria-hidden="true" size={19} strokeWidth={1.8} />
+          <span className="nav-label">{destination.label}</span>
+        </WorkspaceLink>;
+      })}
     </nav>
   );
 }
@@ -73,7 +77,7 @@ function Navigation({ route, onNavigate, label }: Readonly<{
 function CanonicalStatus({ label = "Canonical DataHub context" }: Readonly<{ label?: string }>) {
   return (
     <div className="rail-foot" role="status" aria-label={label} aria-live="polite">
-      <span className="canonical-icon" aria-hidden="true">✓</span>
+      <Icons.database className="canonical-icon" aria-hidden="true" size={18} strokeWidth={1.8} />
       <span>DataHub canonical</span>
     </div>
   );
@@ -93,14 +97,16 @@ function SessionAction({ value, disabled, label, mobile = false }: Readonly<{
           <strong>Sign-out failed.</strong> {value.error}
         </p>
       )}
-      <button
+      <Button
         className="rail-sign-out"
+        variant="ghost"
         disabled={disabled || value.busy}
         {...(label === undefined ? {} : { "aria-label": label })}
         onClick={value.onSignOut}
       >
+        <Icons.logout aria-hidden="true" size={17} />
         {value.busy ? "Signing out…" : "Sign out"}
-      </button>
+      </Button>
     </div>
   );
 }
@@ -130,7 +136,7 @@ export function MobileWorkspaceMenu({ route, onNavigate, sessionAction, disabled
 }>) {
   return (
     <details className="mobile-workspace-menu">
-      <summary>Menu</summary>
+      <summary><Icons.menu aria-hidden="true" size={18} /> Menu</summary>
       <Navigation route={route} onNavigate={onNavigate} label="Mobile application navigation" />
       <CanonicalStatus label="DataHub source status" />
       <SessionAction value={sessionAction} disabled={disabled} label="End operator session" mobile />
@@ -150,7 +156,9 @@ export function CasePicker({ cases, disabled, onOpenCase }: Readonly<{
   return (
     <div className="case-picker">
       <label htmlFor="workspace-case-picker">Find a governed case</label>
-      <input
+      <div className="case-picker-input">
+        <Icons.search aria-hidden="true" size={17} />
+        <Input
         id="workspace-case-picker"
         type="search"
         role="searchbox"
@@ -164,7 +172,8 @@ export function CasePicker({ cases, disabled, onOpenCase }: Readonly<{
         onKeyDown={(event) => {
           if (event.key === "Escape") setQuery("");
         }}
-      />
+        />
+      </div>
       {resultsVisible && (
         <div id="workspace-case-picker-results" className="case-picker-results" role="list" aria-label="Matching governed cases">
           {matches.map((value) => (

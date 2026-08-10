@@ -1,4 +1,7 @@
 import { useState, type FormEvent } from "react";
+import { Button } from "./components/ui/Button";
+import { Input } from "./components/ui/Input";
+import { Icons } from "./icons";
 
 interface SignInPageProps {
   readonly onSignIn: (passphrase: string) => Promise<void>;
@@ -34,7 +37,7 @@ export function SignInPage({ onSignIn }: SignInPageProps) {
         {error && <p className="error-banner" role="alert">{error}</p>}
         <form onSubmit={(event) => void submit(event)}>
           <label htmlFor="operator-passphrase">Operator passphrase</label>
-          <input
+          <Input
             id="operator-passphrase"
             type="password"
             autoComplete="current-password"
@@ -42,9 +45,9 @@ export function SignInPage({ onSignIn }: SignInPageProps) {
             value={passphrase}
             onChange={(event) => setPassphrase(event.target.value)}
           />
-          <button type="submit" disabled={submitting || passphrase.length === 0}>
+          <Button variant="primary" type="submit" disabled={submitting || passphrase.length === 0}><Icons.shield aria-hidden="true" size={16} />
             {submitting ? "Verifying session…" : "Sign in to workspace"}
-          </button>
+          </Button>
         </form>
         <p>Your passphrase is submitted only to this deployment and is not stored in browser storage.</p>
       </section>

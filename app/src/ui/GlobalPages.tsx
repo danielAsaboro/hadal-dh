@@ -3,6 +3,8 @@ import { useState } from "react";
 import type { ChangeCase } from "../domain/case";
 import { StatePill } from "./CaseSections";
 import { WorkspaceLink } from "./AppRail";
+import { Button } from "./components/ui/Button";
+import { Icons } from "./icons";
 import type { WorkspacePage } from "./routes";
 import {
   paginateRows,
@@ -42,9 +44,9 @@ function Pagination({ page, pageCount, total, label, onPage }: Readonly<{
 }>) {
   return (
     <div className="pagination-bar">
-      <button disabled={page === 1} onClick={() => onPage(page - 1)}>Previous page</button>
+      <Button variant="secondary" size="sm" disabled={page === 1} onClick={() => onPage(page - 1)}><Icons.arrowLeft aria-hidden="true" size={15} /> Previous</Button>
       <span role="status" aria-label={`${label} pagination`}>Page {page} of {pageCount} · {total} rows</span>
-      <button disabled={page === pageCount} onClick={() => onPage(page + 1)}>Next page</button>
+      <Button variant="secondary" size="sm" disabled={page === pageCount} onClick={() => onPage(page + 1)}>Next <Icons.arrowRight aria-hidden="true" size={15} /></Button>
     </div>
   );
 }

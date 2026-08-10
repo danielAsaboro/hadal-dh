@@ -43,7 +43,8 @@ export function serializeCase(value: ChangeCase): string {
 export function parseCase(serialized: string): ChangeCase {
   const candidate: unknown = JSON.parse(serialized);
   const parsed = ChangeCaseSchema.parse(candidate);
-  if (parsed.contentHash && parsed.contentHash !== caseContentHash(parsed)) {
+  const { contentHash: _contentHash, ...originalContent } = candidate as Record<string, unknown>;
+  if (parsed.contentHash && parsed.contentHash !== canonicalValueHash(originalContent)) {
     throw new Error("case content hash does not match content");
   }
   return parsed;

@@ -7,6 +7,7 @@ import { join } from "node:path";
 
 import { AgentRunCoordinator } from "../../src/ai/run-coordinator";
 import type { AgentRunSnapshot } from "../../src/ai/run-events";
+import { REMEDIATION_AGENT_TOOL_SEQUENCE } from "../../src/ai/orchestrator";
 import type { ChangeCase, ImpactEvidence } from "../../src/domain/case";
 import { compileCase } from "../../src/domain/compile-case";
 import { createServer, type AgentRunApplication } from "../../src/server/app";
@@ -53,7 +54,10 @@ function agentApplication(): AgentRunApplication {
   });
   return {
     health: async () => ({ available: true, provider: "qvac", modelId: "qwen3.6-27b", managed: true }),
-    start: async ({ caseKey, headSha, prompt }) => runs.start({ caseKey, headSha, prompt, modelId: "qwen3.6-27b" }),
+    start: async ({ caseKey, headSha, prompt, requiredToolSequence }) => {
+      expect(requiredToolSequence).toEqual(REMEDIATION_AGENT_TOOL_SEQUENCE);
+      return runs.start({ caseKey, headSha, prompt, modelId: "qwen3.6-27b" });
+    },
     show: async (runId) => runs.show(runId),
     resolveApproval: async () => { throw new Error("unknown approval token"); },
   };
@@ -84,6 +88,32 @@ describe("governed agent HTTP API", () => {
       expect(events.headers["content-type"]).toContain("text/event-stream");
       expect(events.body).toContain('"kind":"run_started"');
       expect(events.body).toContain('"sequence":2');
+    } finally {
+      await server.close();
+      rmSync(repository.root, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects a caller-supplied tool sequence instead of allowing the fixed workflow to be replaced", async () => {
+    const repository = realRepository();
+    const value = completeCase(repository.baseSha, repository.headSha);
+    const server = createServer({
+      application: {
+        list: async () => [value], show: async () => value,
+        syncWork: async () => value, reconcileWork: async () => value,
+        updateOwnerMappings: async () => value, recordReceipt: async () => value, decide: async () => value,
+      },
+      github: () => { throw new Error("not used"); }, repoRoot: repository.root,
+      agent: agentApplication(),
+      agentScope: { repository: value.repository, baseRef: repository.baseSha, headRef: repository.headSha },
+    });
+    try {
+      const response = await server.inject({
+        method: "POST", url: "/api/agent/runs", payload: {
+          caseKey: value.caseKey, prompt: "Inspect.", requiredToolSequence: ["publishMergeDecision"],
+        },
+      });
+      expect(response.statusCode).toBe(400);
     } finally {
       await server.close();
       rmSync(repository.root, { recursive: true, force: true });

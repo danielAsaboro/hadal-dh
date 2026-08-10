@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 
 import type { EvidenceSource, StatusSurface, WorkSurface } from "../application/cases";
 import { CasesService } from "../application/cases";
+import type { ChangeCase } from "../domain/case";
 import { detectColumnRename } from "../git/dbt-change";
 import { readDiff, resolveRevision } from "../git/repository";
 import { generateCompatibilityMigration, RemediationGenerationError } from "../remediation/generate";
@@ -10,6 +11,7 @@ import { validateRemediation } from "../remediation/validate";
 import { writeRemediationArtifacts } from "../remediation/write";
 import { runValidation, ValidationRunnerError } from "../validation/runner";
 import type { AgentOperations, AgentScope } from "./orchestrator";
+import { verifyGovernedAgentCaseScope } from "./scope";
 
 type Dependencies = Readonly<{
   scope: AgentScope;
@@ -20,6 +22,17 @@ type Dependencies = Readonly<{
   now?: () => string;
 }>;
 
+export function agentCaseContext(value: ChangeCase) {
+  const { agentRuns, contentHash: _contentHash, ...current } = value;
+  return {
+    ...current,
+    audit: {
+      priorRunCount: agentRuns.length,
+      ...(agentRuns.at(-1) === undefined ? {} : { latestRunStatus: agentRuns.at(-1)?.status }),
+    },
+  };
+}
+
 export function createAgentOperations(dependencies: Dependencies): AgentOperations {
   const now = dependencies.now ?? (() => new Date().toISOString());
 
@@ -28,6 +41,12 @@ export function createAgentOperations(dependencies: Dependencies): AgentOperatio
     const headSha = await resolveRevision(dependencies.scope.repoRoot, dependencies.scope.headRef);
     const change = detectColumnRename(await readDiff(dependencies.scope.repoRoot, baseSha, headSha));
     return { baseSha, headSha, change };
+  }
+
+  async function governedCase(caseKey: string): Promise<ChangeCase> {
+    const value = await dependencies.service.show(caseKey);
+    await verifyGovernedAgentCaseScope(dependencies.scope, value);
+    return value;
   }
 
   return {
@@ -45,8 +64,9 @@ export function createAgentOperations(dependencies: Dependencies): AgentOperatio
       maxHops: dependencies.scope.maxHops,
       observedAt: now(),
     }),
-    readCase: async (caseKey) => await dependencies.service.show(caseKey),
+    readCase: async (caseKey) => agentCaseContext(await governedCase(caseKey)),
     mapOwners: async (caseKey) => {
+      await governedCase(caseKey);
       if (dependencies.scope.ownerMappings.length === 0) {
         throw new Error("operator-configured owner mappings are required");
       }
@@ -56,10 +76,12 @@ export function createAgentOperations(dependencies: Dependencies): AgentOperatio
         now(),
       );
     },
-    syncGitHubWork: async (caseKey) =>
-      await dependencies.service.syncWork(caseKey, dependencies.workSurface, now()),
+    syncGitHubWork: async (caseKey) => {
+      await governedCase(caseKey);
+      return await dependencies.service.syncWork(caseKey, dependencies.workSurface, now());
+    },
     generateRemediation: async (caseKey) => {
-      const value = await dependencies.service.show(caseKey);
+      const value = await governedCase(caseKey);
       const artifacts = generateCompatibilityMigration(value);
       const structural = validateRemediation(value, artifacts);
       if (!structural.valid) throw new RemediationGenerationError(structural.errors.join("; "));
@@ -70,7 +92,7 @@ export function createAgentOperations(dependencies: Dependencies): AgentOperatio
       if (dependencies.scope.validationCommand.length === 0 || dependencies.scope.artifactPaths.length === 0) {
         throw new ValidationRunnerError("operator-configured validation command and artifacts are required");
       }
-      const value = await dependencies.service.show(caseKey);
+      const value = await governedCase(caseKey);
       const expected = generateCompatibilityMigration(value);
       const actual = await Promise.all(expected.map(async (artifact) => ({
         relativePath: artifact.relativePath,
@@ -89,10 +111,15 @@ export function createAgentOperations(dependencies: Dependencies): AgentOperatio
       });
       return await dependencies.service.recordReceipt(caseKey, receipt, now());
     },
-    reconcileGitHubWork: async (caseKey) =>
-      await dependencies.service.reconcileWork(caseKey, dependencies.workSurface, now()),
+    reconcileGitHubWork: async (caseKey) => {
+      await governedCase(caseKey);
+      return await dependencies.service.reconcileWork(caseKey, dependencies.workSurface, now());
+    },
     publishMergeDecision: async (caseKey) => {
-      const currentHeadSha = await resolveRevision(dependencies.scope.repoRoot, "HEAD");
+      const currentHeadSha = await verifyGovernedAgentCaseScope(
+        dependencies.scope,
+        await dependencies.service.show(caseKey),
+      );
       const value = await dependencies.service.decide(
         caseKey,
         dependencies.statusSurface,

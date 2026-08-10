@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { DurableAgentRunSchema } from "./agent-audit";
+
 const nonEmpty = z.string().min(1);
 const urn = z.string().startsWith("urn:li:");
 const isoTimestamp = z.string().datetime({ offset: true });
@@ -263,6 +265,7 @@ export const ChangeCaseSchema = z
     approvalDecisions: z.array(ApprovalDecisionSchema).readonly(),
     validationReceipts: z.array(ValidationReceiptSchema).readonly(),
     externalProjections: z.array(ExternalProjectionSchema).readonly(),
+    agentRuns: z.array(DurableAgentRunSchema).readonly().default([]),
     admission: AdmissionDecisionSchema.optional(),
     ownerMappings: z.array(z.tuple([urn, nonEmpty])).readonly(),
     dataHub: DataHubPersistenceSchema,
@@ -288,6 +291,12 @@ export const ChangeCaseSchema = z
     }
     if (new Set(value.workItems.map((item) => item.workKey)).size !== value.workItems.length) {
       context.addIssue({ code: z.ZodIssueCode.custom, message: "duplicate work keys" });
+    }
+    if (value.agentRuns.some((run) => run.caseKey !== value.caseKey)) {
+      context.addIssue({ code: z.ZodIssueCode.custom, message: "agent run case must match the canonical case" });
+    }
+    if (new Set(value.agentRuns.map((run) => run.runId)).size !== value.agentRuns.length) {
+      context.addIssue({ code: z.ZodIssueCode.custom, message: "duplicate agent run IDs" });
     }
   })
   .readonly();

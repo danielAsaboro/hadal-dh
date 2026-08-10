@@ -69,8 +69,8 @@ describe("runtime configuration", () => {
   it("defaults QVAC to the managed local model proven by the live flow", () => {
     expect(qvacConfigFromEnv({})).toEqual({
       mode: "managed",
-      model: "qwen3.5-4b",
-      contextSize: 4096,
+      model: "qwen3.6-27b",
+      contextSize: 16384,
       reasoningBudget: 0,
     });
   });
@@ -86,7 +86,7 @@ describe("runtime configuration", () => {
       baseUrl: "http://127.0.0.1:11435/v1",
       apiKey: "local-only",
       model: "qwen3.6-35b-a3b",
-      contextSize: 4096,
+      contextSize: 16384,
       reasoningBudget: 0,
     });
     expect(() => qvacConfigFromEnv({ CHANGEMARSHAL_QVAC_MODE: "external" })).toThrow(/QVAC_BASE_URL/i);

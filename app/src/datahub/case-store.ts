@@ -26,6 +26,10 @@ function storeError(error: unknown): DataHubCaseStoreError {
   );
 }
 
+function stableCaseUrn(caseKey: string): string {
+  return `urn:li:document:changemarshal-change-case-${caseKey}`;
+}
+
 export class DataHubCaseStore {
   constructor(private readonly tools: DataHubToolCaller) {}
 
@@ -64,7 +68,19 @@ export class DataHubCaseStore {
   }
 
   async findCase(caseKey: string): Promise<string | undefined> {
-    return (await this.findCaseMatch(caseKey))?.urn;
+    const indexed = await this.findCaseMatch(caseKey);
+    if (indexed !== undefined) return indexed.urn;
+    const intendedUrn = stableCaseUrn(caseKey);
+    try {
+      const value = await this.loadCase(intendedUrn);
+      if (value.caseKey !== caseKey) throw new DataHubCaseStoreError("stable document URN does not match its case key");
+      return intendedUrn;
+    } catch (error) {
+      if (error instanceof DataHubCaseStoreError && error.message === "document reread did not return exactly one document") {
+        return undefined;
+      }
+      throw error;
+    }
   }
 
   async listCases(): Promise<readonly ChangeCase[]> {
@@ -174,7 +190,7 @@ export class DataHubCaseStore {
     // identity prevents an immediate rerun (or another process) from creating a duplicate
     // before the canonical title becomes searchable. Existing random/legacy URNs discovered
     // above remain authoritative and are updated in place.
-    const intendedUrn = existingUrn ?? `urn:li:document:changemarshal-change-case-${value.caseKey}`;
+    const intendedUrn = existingUrn ?? stableCaseUrn(value.caseKey);
     input.urn = intendedUrn;
     const response = record(await this.tools.callTool("save_document", input), "save_document response");
     if (response.success !== true) throw new DataHubCaseStoreError("save_document did not succeed");

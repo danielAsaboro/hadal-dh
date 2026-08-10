@@ -7,6 +7,7 @@ import {
 } from "../../src/domain/case";
 import { caseKey, revisionKey, workKey } from "../../src/domain/identity";
 import {
+  canonicalValueHash,
   caseContentHash,
   parseCase,
   serializeCase,
@@ -100,7 +101,64 @@ function exampleCase(): ChangeCase {
   });
 }
 
+function durableRun(value: ChangeCase) {
+  return {
+    runId: "run-audit-1",
+    caseKey: value.caseKey,
+    revisionKey: value.revision.revisionKey,
+    headSha: value.revision.headSha,
+    modelId: "qwen3.6-27b",
+    status: "completed",
+    events: [
+      { kind: "run_started", sequence: 1, at: "2026-08-09T12:01:00.000Z", summary: "Run started" },
+      { kind: "run_completed", sequence: 2, at: "2026-08-09T12:02:00.000Z", summary: "Run completed" },
+    ],
+    answer: "Verified outcome",
+    createdAt: "2026-08-09T12:01:00.000Z",
+    updatedAt: "2026-08-09T12:02:00.000Z",
+  };
+}
+
 describe("canonical case serialization", () => {
+  it("materializes an empty durable agent audit list for existing schema-v1 cases", () => {
+    const legacy = JSON.parse(serializeCase(exampleCase())) as Record<string, unknown>;
+    delete legacy.agentRuns;
+
+    const parsed = ChangeCaseSchema.parse(legacy) as ChangeCase & { agentRuns?: readonly unknown[] };
+
+    expect(parsed.agentRuns).toEqual([]);
+  });
+
+  it("verifies and migrates a sealed pre-agent-audit schema-v1 payload", () => {
+    const legacy = JSON.parse(serializeCase(exampleCase())) as Record<string, unknown>;
+    delete legacy.agentRuns;
+    delete legacy.contentHash;
+    legacy.contentHash = canonicalValueHash(legacy);
+
+    const parsed = parseCase(JSON.stringify(legacy));
+
+    expect(parsed.agentRuns).toEqual([]);
+    expect(parsed.contentHash).toBe(legacy.contentHash);
+  });
+
+  it("rejects raw approval tokens and unknown secrets in durable agent audit records", () => {
+    const value = exampleCase();
+
+    expect(() => ChangeCaseSchema.parse({
+      ...value,
+      agentRuns: [{ ...durableRun(value), token: "must-never-reach-datahub" }],
+    })).toThrow();
+  });
+
+  it("rejects a durable agent run attached to a different canonical case", () => {
+    const value = exampleCase();
+
+    expect(() => ChangeCaseSchema.parse({
+      ...value,
+      agentRuns: [{ ...durableRun(value), caseKey: "f".repeat(24) }],
+    })).toThrow(/agent run case/i);
+  });
+
   it("round-trips to byte-stable canonical JSON", () => {
     const encoded = serializeCase(exampleCase());
 

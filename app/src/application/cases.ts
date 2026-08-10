@@ -5,6 +5,7 @@ import type {
   ValidationReceipt,
 } from "../domain/case";
 import { ChangeCaseSchema } from "../domain/case";
+import { DurableAgentRunSchema, type DurableAgentRun } from "../domain/agent-audit";
 import { compileCase } from "../domain/compile-case";
 import { evaluateCase } from "../domain/policy";
 import { detectColumnRename } from "../git/dbt-change";
@@ -185,6 +186,22 @@ export class CasesService {
       receipt,
     ].sort((left, right) => left.workKey.localeCompare(right.workKey));
     return await this.persist(unverified({ ...current, validationReceipts: receipts }, at), current.revision.headSha, at);
+  }
+
+  async recordAgentRun(caseKey: string, input: DurableAgentRun, at: string): Promise<ChangeCase> {
+    const run = DurableAgentRunSchema.parse(input);
+    const current = await this.load(caseKey);
+    if (run.caseKey !== current.caseKey) {
+      throw new CasesServiceError("agent run does not match the canonical case");
+    }
+    if (run.revisionKey !== current.revision.revisionKey || run.headSha !== current.revision.headSha) {
+      throw new CasesServiceError("agent run does not match the current revision or head");
+    }
+    const runs = [
+      ...current.agentRuns.filter((item) => item.runId !== run.runId),
+      run,
+    ].sort((left, right) => left.createdAt.localeCompare(right.createdAt) || left.runId.localeCompare(right.runId));
+    return await this.persist(unverified({ ...current, agentRuns: runs }, at), current.revision.headSha, at);
   }
 
   async decide(

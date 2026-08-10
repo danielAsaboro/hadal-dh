@@ -46,9 +46,11 @@ class CapturedDocumentService implements DataHubToolCaller {
   readonly saves: Readonly<Record<string, unknown>>[] = [];
   failSave = false;
   truncateRead = false;
+  hideSearch = false;
 
   async callTool(name: string, input: Readonly<Record<string, unknown>>): Promise<unknown> {
     if (name === "search_documents") {
+      if (this.hideSearch) return { start: 0, count: 10, total: 0 };
       const results = [...this.documents.entries()].map(([urn, document]) => ({
         entity: { urn, info: { title: document.title } },
       }));
@@ -109,6 +111,16 @@ describe("DataHub case persistence", () => {
     const second = await store.saveAndVerifyCase(value, "2026-08-09T10:05:00.000Z");
     expect(second).toEqual(first);
     expect(service.saves).toHaveLength(2);
+  });
+
+  it("resolves a newly saved stable case URN while DataHub search is eventually consistent", async () => {
+    const service = new CapturedDocumentService();
+    const store = new DataHubCaseStore(service);
+    const saved = await store.saveAndVerifyCase(changeCase(), "2026-08-09T10:05:00.000Z");
+    service.hideSearch = true;
+
+    expect(await store.findCase(saved.caseKey)).toBe(documentUrn);
+    expect(await store.findCase("f".repeat(24))).toBeUndefined();
   });
 
   it("finds and migrates a legacy Cutset document in place", async () => {

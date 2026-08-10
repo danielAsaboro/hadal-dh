@@ -15,6 +15,9 @@ describe("ChangeMarshal CLI", () => {
       "plan", "show", "map-owner", "sync-github", "reconcile",
       "generate", "brief", "validate", "decide",
     ]);
+    const agent = cli.commands.find((command) => command.name() === "agent");
+    expect(agent?.options.map((option) => option.long)).toContain("--case-key");
+    expect(agent?.options.map((option) => option.long)).not.toContain("--tool-plan-json");
   });
 
   it("uses stable nonzero failure categories", () => {

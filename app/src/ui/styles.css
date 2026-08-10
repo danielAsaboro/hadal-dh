@@ -135,6 +135,8 @@ h3 { margin: 10px 0 5px; font-size: 14px; }
 .timeline li::before { content: ""; position: absolute; left: -20px; top: 11px; width: 7px; height: 7px; border-radius: 50%; background: #d6ff57; box-shadow: 0 0 0 4px #23282e; }
 .timeline time { color: #666f80; font: 10px ui-monospace, monospace; }
 .timeline span { color: #7f8798; }
+.history-subheading { margin: 22px 0 14px; color: #bbc2cf; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
+.agent-audit-timeline li::before { background: #65d6ff; }
 .empty-state { color: #737c8d; padding: 18px 0; margin: 0; }
 @media (max-width: 900px) {
   .workspace-shell { grid-template-columns: 1fr; }

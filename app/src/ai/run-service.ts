@@ -3,6 +3,7 @@ import type { ModelMessage } from "ai";
 import { AgentRunCoordinator } from "./run-coordinator";
 import type { AgentRunSnapshot } from "./run-events";
 import { createChangeMarshalAgent } from "./orchestrator";
+import type { AgentToolName } from "./orchestrator";
 
 type ToolCall = Readonly<{ toolCallId: string; toolName: string; input: unknown }>;
 type ToolExecutionStart = Readonly<{ toolCall: ToolCall }>;
@@ -20,6 +21,8 @@ export interface AgentGenerationResult {
 export interface AgentGenerator {
   generate(options: Readonly<{
     messages: readonly ModelMessage[];
+    governedCaseKey: string;
+    requiredToolSequence: readonly AgentToolName[];
     onToolExecutionStart: (event: ToolExecutionStart) => void;
     onToolExecutionEnd: (event: ToolExecutionEnd) => void;
   }>): Promise<AgentGenerationResult>;
@@ -32,6 +35,10 @@ export function adaptChangeMarshalAgent(
     generate: async (options) => {
       const result = await agent.generate({
         messages: [...options.messages],
+        options: {
+          governedCaseKey: options.governedCaseKey,
+          requiredToolSequence: [...options.requiredToolSequence],
+        },
         onToolExecutionStart: (event) => options.onToolExecutionStart({
           toolCall: {
             toolCallId: event.toolCall.toolCallId,
@@ -58,10 +65,15 @@ type Dependencies = Readonly<{
   generator: AgentGenerator;
   modelId: string;
   managed: boolean;
+  persist: (snapshot: AgentRunSnapshot) => Promise<void>;
 }>;
 
 type Transcript = {
   messages: ModelMessage[];
+  requiredToolSequence: readonly AgentToolName[];
+  completedTools: string[];
+  deniedTool?: string;
+  planViolation?: string;
 };
 
 type ApprovalRequest = Readonly<{
@@ -89,6 +101,7 @@ export class GovernedAgentRunService {
   readonly #generator: AgentGenerator;
   readonly #modelId: string;
   readonly #managed: boolean;
+  readonly #persistRun: (snapshot: AgentRunSnapshot) => Promise<void>;
   readonly #transcripts = new Map<string, Transcript>();
 
   constructor(dependencies: Dependencies) {
@@ -96,18 +109,33 @@ export class GovernedAgentRunService {
     this.#generator = dependencies.generator;
     this.#modelId = dependencies.modelId;
     this.#managed = dependencies.managed;
+    this.#persistRun = dependencies.persist;
   }
 
   async health() {
     return { available: true as const, provider: "qvac" as const, modelId: this.#modelId, managed: this.#managed };
   }
 
-  async start(input: Readonly<{ caseKey: string; headSha: string; prompt: string }>): Promise<AgentRunSnapshot> {
+  async start(input: Readonly<{
+    caseKey: string; headSha: string; prompt: string; requiredToolSequence: readonly AgentToolName[];
+  }>): Promise<AgentRunSnapshot> {
     const started = this.#coordinator.start({ ...input, modelId: this.#modelId });
-    this.#transcripts.set(started.runId, { messages: [{
-      role: "user",
-      content: `Governed case key: ${input.caseKey}\nExpected Git head SHA: ${input.headSha}\n\nOperator request:\n${input.prompt}`,
-    }] });
+    this.#transcripts.set(started.runId, {
+      messages: [{
+        role: "user",
+        content: `Governed case key: ${input.caseKey}\nExpected Git head SHA: ${input.headSha}\n\nOperator request:\n${input.prompt}`,
+      }],
+      completedTools: [],
+      requiredToolSequence: input.requiredToolSequence,
+    });
+    try {
+      await this.#persistRun(started);
+    } catch (error) {
+      this.#transcripts.delete(started.runId);
+      const failed = this.#coordinator.fail(started.runId, `DataHub agent audit persistence failed: ${errorSummary(error)}`);
+      await this.#persistRun(failed).catch(() => undefined);
+      throw error;
+    }
     return await this.#generate(started.runId);
   }
 
@@ -121,8 +149,19 @@ export class GovernedAgentRunService {
     const before = this.#coordinator.show(input.runId);
     const pending = before.pendingApproval;
     if (pending === undefined) throw new Error("agent run has no pending approval");
-    this.#coordinator.resolveApproval(input.runId, input.token, input.currentHeadSha, input.approved, input.reason);
+    const decided = this.#coordinator.resolveApproval(
+      input.runId, input.token, input.currentHeadSha, input.approved, input.reason,
+    );
+    try {
+      await this.#persistRun(decided);
+    } catch (error) {
+      this.#transcripts.delete(input.runId);
+      const failed = this.#coordinator.fail(input.runId, `DataHub approval audit persistence failed: ${errorSummary(error)}`);
+      await this.#persistRun(failed).catch(() => undefined);
+      throw error;
+    }
     const transcript = this.#transcript(input.runId);
+    if (!input.approved) transcript.deniedTool = pending.toolName;
     transcript.messages.push({
       role: "tool",
       content: [{
@@ -137,9 +176,12 @@ export class GovernedAgentRunService {
 
   async #generate(runId: string): Promise<AgentRunSnapshot> {
     const transcript = this.#transcript(runId);
+    let snapshot: AgentRunSnapshot;
     try {
       const result = await this.#generator.generate({
         messages: [...transcript.messages],
+        governedCaseKey: this.#coordinator.show(runId).caseKey,
+        requiredToolSequence: transcript.requiredToolSequence,
         onToolExecutionStart: ({ toolCall }) => {
           this.#coordinator.toolStarted(runId, { toolName: toolCall.toolName, toolCallId: toolCall.toolCallId });
         },
@@ -151,6 +193,14 @@ export class GovernedAgentRunService {
               summary: `${toolCall.toolName} failed: ${errorSummary(toolOutput.error)}`,
             });
           } else {
+            const expected = transcript.requiredToolSequence[transcript.completedTools.length];
+            if (expected === undefined) {
+              transcript.planViolation = `required tool sequence is complete; refusing extra tool ${toolCall.toolName}`;
+            } else if (expected !== undefined && expected !== toolCall.toolName) {
+              transcript.planViolation = `required tool sequence expected ${expected} but executed ${toolCall.toolName}`;
+            } else {
+              transcript.completedTools.push(toolCall.toolName);
+            }
             this.#coordinator.toolCompleted(runId, { toolName: toolCall.toolName, toolCallId: toolCall.toolCallId });
           }
         },
@@ -158,27 +208,48 @@ export class GovernedAgentRunService {
       transcript.messages.push(...result.response.messages);
       const approvals = result.content.filter(approvalRequest);
       if (approvals.length > 1) {
-        return this.#coordinator.fail(runId, "Agent must request exactly one mutation approval at a time");
+        snapshot = this.#coordinator.fail(runId, "Agent must request exactly one mutation approval at a time");
+      } else if (approvals[0] !== undefined) {
+        const approval = approvals[0];
+        const expected = transcript.requiredToolSequence[transcript.completedTools.length];
+        const proposedViolation = expected === undefined
+          ? `required tool sequence is complete; refusing extra tool ${approval.toolCall.toolName}`
+          : expected !== undefined && expected !== approval.toolCall.toolName
+            ? `required tool sequence expected ${expected} but proposed ${approval.toolCall.toolName}`
+            : undefined;
+        if (transcript.planViolation !== undefined || proposedViolation !== undefined) {
+          snapshot = this.#coordinator.fail(
+            runId,
+            transcript.planViolation ?? proposedViolation ?? "required tool sequence violation",
+          );
+        } else {
+          this.#coordinator.toolProposed(runId, {
+            toolName: approval.toolCall.toolName,
+            toolCallId: approval.toolCall.toolCallId,
+          });
+          snapshot = this.#coordinator.requireApproval(runId, {
+            approvalId: approval.approvalId,
+            toolCallId: approval.toolCall.toolCallId,
+            toolName: approval.toolCall.toolName,
+            input: approval.toolCall.input,
+          });
+        }
+      } else {
+        const requiredCount = transcript.requiredToolSequence.length;
+        if (transcript.planViolation !== undefined) {
+          snapshot = this.#coordinator.fail(runId, transcript.planViolation);
+        } else if (transcript.deniedTool === undefined && transcript.completedTools.length < requiredCount) {
+          snapshot = this.#coordinator.fail(runId, "Required tool sequence incomplete; refusing a terminal model answer");
+        } else {
+          snapshot = this.#coordinator.complete(runId, result.text);
+        }
       }
-      const approval = approvals[0];
-      if (approval !== undefined) {
-        this.#coordinator.toolProposed(runId, {
-          toolName: approval.toolCall.toolName,
-          toolCallId: approval.toolCall.toolCallId,
-        });
-        return this.#coordinator.requireApproval(runId, {
-          approvalId: approval.approvalId,
-          toolCallId: approval.toolCall.toolCallId,
-          toolName: approval.toolCall.toolName,
-          input: approval.toolCall.input,
-        });
-      }
-      this.#transcripts.delete(runId);
-      return this.#coordinator.complete(runId, result.text);
     } catch (error) {
-      this.#transcripts.delete(runId);
-      return this.#coordinator.fail(runId, errorSummary(error));
+      snapshot = this.#coordinator.fail(runId, errorSummary(error));
     }
+    await this.#persistRun(snapshot);
+    if (snapshot.status === "completed" || snapshot.status === "failed") this.#transcripts.delete(runId);
+    return snapshot;
   }
 
   #transcript(runId: string): Transcript {

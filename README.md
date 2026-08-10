@@ -68,7 +68,7 @@ npm run serve
 
 ## Approval-gated AI SDK 7 agent
 
-`changemarshal agent` runs a real Vercel AI SDK 7 `ToolLoopAgent` through QVAC's official AI SDK provider. Managed mode defaults to the tool-capable `qwen3.5-4b` model proven by the live browser flow; external mode attaches to an explicitly configured QVAC OpenAI-compatible endpoint. The fixed runtime scope supplies the repository, Git refs, owner mappings, validator argument array, artifact paths, and status URL; the model cannot replace them. Read-only Git/DataHub inspection may run directly. Planning/write-back, owner mapping, GitHub synchronization, remediation writes, validation commands, reconciliation, and status publication all emit AI SDK `user-approval` requests before execution.
+`changemarshal agent` runs a real Vercel AI SDK 7 `ToolLoopAgent` through QVAC's official AI SDK provider. Managed mode defaults to the tool-capable `qwen3.6-27b` model with a 16,384-token context, verified on a 36 GB Apple-silicon host; smaller machines can explicitly select `qwen3.5-4b`. External mode attaches to an explicitly configured QVAC OpenAI-compatible endpoint. The shipped command-center and CLI workflow fixes the plan to `readCase → generateRemediation`; callers cannot replace it. The runtime also binds every case-scoped tool argument to `--case-key` and verifies that case against the resolved repository, base, head, and live `HEAD` before model startup. The fixed scope supplies owner mappings, validator arguments, artifact paths, and status URL; the model cannot replace them. Every mutating tool remains configured as AI SDK `user-approval`, and deterministic policy alone owns merge authority.
 
 ```bash
 npm run changemarshal -- agent \
@@ -76,6 +76,7 @@ npm run changemarshal -- agent \
   --repository owner/change-marshal \
   --base BASE_SHA \
   --head HEAD_SHA \
+  --case-key CASE_KEY \
   --target-url https://your-host/cases/current \
   --map urn:li:corpuser:data-owner=github-login \
   --validation-command-json '["dbt","test","--select","customers+"]' \
@@ -83,12 +84,12 @@ npm run changemarshal -- agent \
              .changemarshal/remediation/customers_compatibility.yml
 ```
 
-The terminal uses `y`/`n` for each proposed mutation. The web command center exposes the same exact-argument, expiring, single-use approval gate. Before a run and again before continuation, its HTTP boundary re-resolves the configured base, head, and live checkout, rejecting a different case repository or any moved Git `HEAD`. Set `CHANGEMARSHAL_AGENT_ENABLED=1` plus every fixed-scope variable shown in `.env.example` to enable it; otherwise its health endpoint returns 503. Deterministic case policy alone computes merge admission. The GitHub mutation portion remains credential-gated and must not be treated as live-verified merely because its contract suite passes.
+The terminal uses `y`/`n` for each proposed mutation. The web command center exposes the same exact-argument, expiring, single-use approval gate. Before a run and again before continuation, its HTTP boundary re-resolves the configured base, head, and live checkout, rejecting a different case repository or any moved Git `HEAD`. Token-free run events, denials, approvals, tool outcomes, and terminal answers are idempotently written into the same canonical DataHub case and reread before the UI presents them. Set `CHANGEMARSHAL_AGENT_ENABLED=1` plus every fixed-scope variable shown in `.env.example` to enable it; otherwise its health endpoint returns 503. Deterministic case policy alone computes merge admission. The GitHub mutation portion remains credential-gated and must not be treated as live-verified merely because its contract suite passes.
 
-The repository-owned executable launcher invokes the official `@qvac/cli` and merges `app/qvac.config.json` into the provider-generated private config, raising the registry client's stalled-block timeout and retry limit for real multi-gigabyte downloads. On macOS, managed mode automatically selects a short temporary path when the inherited application temp path would exceed the native worker's Unix-socket limit. `qwen3.6-27b` remains an explicit alias, but it must pass this semantic check on the target hardware before being used or claimed:
+The repository-owned executable launcher invokes the official `@qvac/cli` and merges `app/qvac.config.json` into the provider-generated private config, raising the registry client's stalled-block timeout and retry limit for real multi-gigabyte downloads. On macOS, managed mode automatically selects a short temporary path when the inherited application temp path would exceed the native worker's Unix-socket limit. Run the same semantic check on each target host before relying on its local model:
 
 ```bash
-CHANGEMARSHAL_QVAC_CONTEXT_SIZE=4096 \
+CHANGEMARSHAL_QVAC_CONTEXT_SIZE=16384 \
   npm --workspace app exec -- tsx scripts/qvac-smoke.mts
 ```
 

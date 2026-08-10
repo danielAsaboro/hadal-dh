@@ -1,22 +1,12 @@
 import { z } from "zod";
 
-export const AgentRunStatusSchema = z.enum(["running", "waiting_for_approval", "completed", "failed"]);
-
-export const AgentRunEventSchema = z.object({
-  kind: z.enum([
-    "run_started", "model_connected", "tool_proposed", "approval_required", "tool_approved",
-    "tool_denied", "tool_started", "tool_completed", "tool_failed", "policy_evaluated",
-    "external_reread_verified", "answer_emitted", "run_completed", "run_failed",
-  ]),
-  sequence: z.number().int().positive(),
-  at: z.string().datetime(),
-  summary: z.string().min(1).max(500),
-  toolName: z.string().min(1).optional(),
-  toolCallId: z.string().min(1).optional(),
-  approvalId: z.string().min(1).optional(),
-  argumentsHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
-  approved: z.boolean().optional(),
-}).strict();
+export {
+  AgentRunEventSchema,
+  AgentRunStatusSchema,
+  type AgentRunEvent,
+} from "../domain/agent-audit";
+import { AgentRunEventSchema, AgentRunStatusSchema } from "../domain/agent-audit";
+import { DurableAgentRunSchema, type DurableAgentRun } from "../domain/agent-audit";
 
 export const PendingAgentApprovalSchema = z.object({
   token: z.string().min(1),
@@ -39,6 +29,34 @@ export const AgentRunSnapshotSchema = z.object({
   pendingApproval: PendingAgentApprovalSchema.optional(),
 }).strict();
 
-export type AgentRunEvent = z.infer<typeof AgentRunEventSchema>;
 export type AgentRunSnapshot = z.infer<typeof AgentRunSnapshotSchema>;
 export type PendingAgentApproval = z.infer<typeof PendingAgentApprovalSchema>;
+
+export function toDurableAgentRun(snapshot: AgentRunSnapshot, revisionKey: string): DurableAgentRun {
+  const first = snapshot.events[0];
+  const last = snapshot.events.at(-1);
+  if (first === undefined || last === undefined) throw new Error("agent run has no durable events");
+  const pending = snapshot.pendingApproval;
+  return DurableAgentRunSchema.parse({
+    runId: snapshot.runId,
+    caseKey: snapshot.caseKey,
+    revisionKey,
+    headSha: snapshot.headSha,
+    modelId: snapshot.modelId,
+    status: snapshot.status,
+    events: snapshot.events,
+    ...(snapshot.answer === undefined ? {} : { answer: snapshot.answer }),
+    ...(pending === undefined ? {} : {
+      pendingApproval: {
+        approvalId: pending.approvalId,
+        toolCallId: pending.toolCallId,
+        toolName: pending.toolName,
+        argumentsHash: pending.argumentsHash,
+        requestedAt: pending.requestedAt,
+        expiresAt: pending.expiresAt,
+      },
+    }),
+    createdAt: first.at,
+    updatedAt: last.at,
+  });
+}

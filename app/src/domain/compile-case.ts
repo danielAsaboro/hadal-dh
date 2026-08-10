@@ -200,6 +200,7 @@ export function compileCase(
     approvalDecisions: sameRevision ? existing.approvalDecisions : [],
     validationReceipts: sameRevision ? existing.validationReceipts : [],
     externalProjections: sameRevision ? existing.externalProjections : [],
+    agentRuns: sameLogicalCase ? existing.agentRuns : [],
     ...(sameRevision && existing.admission !== undefined ? { admission: existing.admission } : {}),
     ownerMappings: sameLogicalCase ? existing.ownerMappings : [],
     dataHub: sameRevision ? existing.dataHub : { verified: false },

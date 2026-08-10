@@ -8,8 +8,9 @@ import { Command } from "commander";
 
 import { CoordinationBriefError, coordinationModel, generateCoordinationBrief } from "./ai/coordination-brief";
 import { createAgentOperations } from "./ai/operations";
-import { createChangeMarshalAgent } from "./ai/orchestrator";
+import { createChangeMarshalAgent, REMEDIATION_AGENT_TOOL_SEQUENCE } from "./ai/orchestrator";
 import { createQvacModel } from "./ai/qvac";
+import { verifyGovernedAgentCaseScope } from "./ai/scope";
 import { CasesService, CasesServiceError, type EvidenceSource } from "./application/cases";
 import { AtomicCaseReplica } from "./application/replica";
 import { aiConfigFromEnv, ConfigError, dataHubMcpConfigFromEnv, githubConfigFromEnv, parseCommand, qvacConfigFromEnv, warnLegacyProductEnv } from "./config";
@@ -207,6 +208,7 @@ export function buildCli(): Command {
     .requiredOption("--repository <owner/name>", "stable repository identity")
     .requiredOption("--base <ref>", "fixed base Git revision")
     .requiredOption("--head <ref>", "fixed head Git revision")
+    .requiredOption("--case-key <key>", "exact existing governed case key")
     .requiredOption("--target-url <url>", "canonical case workspace URL for GitHub status")
     .requiredOption("--map <urn=login...>", "operator-approved owner mappings")
     .requiredOption("--validation-command-json <json>", "fixed validator argument array; never a shell string")
@@ -215,13 +217,12 @@ export function buildCli(): Command {
     .option("--output <path>", "verified local audit replica", ".changemarshal/case.json")
     .action(async (options: {
       repo: string; repository: string; base: string; head: string; targetUrl: string;
-      map: string[]; validationCommandJson: string; artifact: string[]; maxHops: string; output: string;
+      caseKey: string; map: string[]; validationCommandJson: string;
+      artifact: string[]; maxHops: string; output: string;
     }) => {
       const value = await runtime(options.output);
       let qvac: Awaited<ReturnType<typeof createQvacModel>> | undefined;
       try {
-        qvac = await createQvacModel(qvacConfigFromEnv());
-        const connector = githubConnector();
         const scope = {
           repoRoot: resolve(options.repo),
           repository: options.repository,
@@ -233,6 +234,10 @@ export function buildCli(): Command {
           validationCommand: parseCommand(options.validationCommandJson),
           artifactPaths: options.artifact,
         };
+        const governedCase = await value.service.show(options.caseKey);
+        await verifyGovernedAgentCaseScope(scope, governedCase);
+        const connector = githubConnector();
+        qvac = await createQvacModel(qvacConfigFromEnv());
         const agent = createChangeMarshalAgent({
           model: qvac.model,
           scope,
@@ -243,6 +248,10 @@ export function buildCli(): Command {
             workSurface: connector,
             statusSurface: connector,
           }),
+          defaultCallOptions: {
+            governedCaseKey: options.caseKey,
+            requiredToolSequence: REMEDIATION_AGENT_TOOL_SEQUENCE,
+          },
         });
         // @ai-sdk/tui declares Agent<any,...>, which is contravariantly wider
         // than a no-call-options ToolLoopAgent under exactOptionalPropertyTypes.

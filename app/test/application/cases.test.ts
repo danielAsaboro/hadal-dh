@@ -7,6 +7,7 @@ import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
 
 import type { ChangeCase, DbtColumnRename, ImpactEvidence } from "../../src/domain/case";
+import type { DurableAgentRun } from "../../src/domain/agent-audit";
 import { parseCase } from "../../src/domain/serialization";
 import {
   CasesService,
@@ -76,6 +77,53 @@ async function gitRepository(): Promise<Readonly<{ root: string; base: string; h
 }
 
 describe("resumable case services", () => {
+  it("upserts one durable agent run without duplicating its DataHub record", async () => {
+    const repo = await gitRepository();
+    const store = new VerifiedMemoryStore();
+    const service = new CasesService(new CapturedEvidence(evidence()), store);
+    const value = await service.plan({
+      repoRoot: repo.root, repository: "acme/warehouse", baseRef: repo.base, headRef: repo.head,
+      maxHops: 3, observedAt: "2026-08-09T10:00:00.000Z",
+    });
+    const started: DurableAgentRun = {
+      runId: "run-1", caseKey: value.caseKey, revisionKey: value.revision.revisionKey,
+      headSha: value.revision.headSha, modelId: "qwen3.6-27b", status: "running",
+      events: [{ kind: "run_started", sequence: 1, at: "2026-08-09T10:01:00.000Z", summary: "started" }],
+      createdAt: "2026-08-09T10:01:00.000Z", updatedAt: "2026-08-09T10:01:00.000Z",
+    };
+
+    const first = await service.recordAgentRun(value.caseKey, started, started.updatedAt);
+    const completed: DurableAgentRun = {
+      ...started, status: "completed", answer: "verified",
+      events: [...started.events, { kind: "run_completed", sequence: 2, at: "2026-08-09T10:02:00.000Z", summary: "completed" }],
+      updatedAt: "2026-08-09T10:02:00.000Z",
+    };
+    const second = await service.recordAgentRun(value.caseKey, completed, completed.updatedAt);
+
+    expect(first.agentRuns).toEqual([started]);
+    expect(second.agentRuns).toHaveLength(1);
+    expect(second.agentRuns[0]).toMatchObject({ runId: "run-1", status: "completed", answer: "verified" });
+  });
+
+  it("rejects a durable agent run for a stale revision or head", async () => {
+    const repo = await gitRepository();
+    const store = new VerifiedMemoryStore();
+    const service = new CasesService(new CapturedEvidence(evidence()), store);
+    const value = await service.plan({
+      repoRoot: repo.root, repository: "acme/warehouse", baseRef: repo.base, headRef: repo.head,
+      maxHops: 3, observedAt: "2026-08-09T10:00:00.000Z",
+    });
+    const stale: DurableAgentRun = {
+      runId: "run-stale", caseKey: value.caseKey, revisionKey: "f".repeat(24),
+      headSha: "0".repeat(40), modelId: "qwen3.6-27b", status: "failed",
+      events: [{ kind: "run_failed", sequence: 1, at: "2026-08-09T10:01:00.000Z", summary: "failed" }],
+      createdAt: "2026-08-09T10:01:00.000Z", updatedAt: "2026-08-09T10:01:00.000Z",
+    };
+
+    await expect(service.recordAgentRun(value.caseKey, stale, stale.updatedAt)).rejects.toThrow(/revision or head/i);
+    expect((await service.show(value.caseKey)).agentRuns).toEqual([]);
+  });
+
   it("plans from a real Git diff, persists policy, and writes a verified replica", async () => {
     const repo = await gitRepository();
     const store = new VerifiedMemoryStore();
@@ -102,12 +150,19 @@ describe("resumable case services", () => {
       repoRoot: repo.root, repository: "acme/warehouse", baseRef: repo.base, headRef: repo.head,
       maxHops: 3, observedAt: "2026-08-09T10:00:00.000Z",
     });
+    await service.recordAgentRun(first.caseKey, {
+      runId: "run-history", caseKey: first.caseKey, revisionKey: first.revision.revisionKey,
+      headSha: first.revision.headSha, modelId: "qwen3.6-27b", status: "completed",
+      events: [{ kind: "run_completed", sequence: 1, at: "2026-08-09T10:01:00.000Z", summary: "completed" }],
+      answer: "verified", createdAt: "2026-08-09T10:01:00.000Z", updatedAt: "2026-08-09T10:01:00.000Z",
+    }, "2026-08-09T10:01:00.000Z");
     const same = await service.plan({
       repoRoot: repo.root, repository: "acme/warehouse", baseRef: repo.base, headRef: repo.head,
       maxHops: 3, observedAt: "2026-08-09T10:05:00.000Z",
     });
     expect(same.caseKey).toBe(first.caseKey);
     expect(same.revision.revisionKey).toBe(first.revision.revisionKey);
+    expect(same.agentRuns).toHaveLength(1);
 
     await writeFile(join(repo.root, "extra.txt"), "new revision\n", "utf8");
     await execFile("git", ["-C", repo.root, "add", "extra.txt"]);
@@ -121,6 +176,7 @@ describe("resumable case services", () => {
     expect(changed.approvalDecisions).toEqual([]);
     expect(changed.validationReceipts).toEqual([]);
     expect(changed.externalProjections).toEqual([]);
+    expect(changed.agentRuns).toHaveLength(1);
   }, 15_000);
 
   it("prevents external work for incomplete evidence and preserves state on partial failure", async () => {

@@ -8,6 +8,7 @@ import { createChangeMarshalAgent } from "../ai/orchestrator";
 import { createQvacModel, type QvacModelHandle } from "../ai/qvac";
 import { AgentRunCoordinator } from "../ai/run-coordinator";
 import { adaptChangeMarshalAgent, GovernedAgentRunService } from "../ai/run-service";
+import { toDurableAgentRun } from "../ai/run-events";
 import { CasesService } from "../application/cases";
 import { AtomicCaseReplica } from "../application/replica";
 import { agentScopeFromEnv, dataHubMcpConfigFromEnv, githubConfigFromEnv, productEnv, qvacConfigFromEnv, warnLegacyProductEnv } from "../config";
@@ -66,6 +67,11 @@ if (productEnv(process.env, "AGENT_ENABLED") === "1") {
       generator: adaptChangeMarshalAgent(agent),
       modelId: qvac.modelId,
       managed: qvac.managed,
+      persist: async (snapshot) => {
+        const current = await service.show(snapshot.caseKey);
+        const run = toDurableAgentRun(snapshot, current.revision.revisionKey);
+        await service.recordAgentRun(snapshot.caseKey, run, run.updatedAt);
+      },
     });
   } catch (error) {
     if (qvac !== undefined) await qvac.close();

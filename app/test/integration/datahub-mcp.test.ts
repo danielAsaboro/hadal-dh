@@ -1,6 +1,7 @@
 import { expect, it } from "vitest";
 import { resolve } from "node:path";
 
+import { CasesService } from "../../src/application/cases";
 import { dataHubMcpConfigFromEnv, productEnv } from "../../src/config";
 import { DataHubCaseStore } from "../../src/datahub/case-store";
 import { collectEvidence } from "../../src/datahub/evidence";
@@ -76,6 +77,30 @@ const liveWriteback = live && productEnv(process.env, "INTEGRATION_WRITEBACK") =
     expect(first.dataHub.verified).toBe(true);
     expect(second.dataHub.documentUrn).toBe(first.dataHub.documentUrn);
     expect(second.contentHash).toBe(first.contentHash);
+
+    const service = new CasesService({ collect: async () => evidence }, store);
+    const auditStartedAt = new Date(observedAt).toISOString();
+    const auditAt = new Date(Date.parse(observedAt) + 1_000).toISOString();
+    const withAudit = await service.recordAgentRun(value.caseKey, {
+      runId: `live-datahub-${headSha.slice(0, 12)}`,
+      caseKey: value.caseKey,
+      revisionKey: value.revision.revisionKey,
+      headSha,
+      modelId: "live-datahub-writeback-proof",
+      status: "completed",
+      events: [
+        { kind: "run_started", sequence: 1, at: auditStartedAt, summary: "Live durable audit write-back started" },
+        { kind: "run_completed", sequence: 2, at: auditAt, summary: "Live durable audit write-back verified" },
+      ],
+      answer: "DataHub accepted and returned this token-free audit record.",
+      createdAt: auditStartedAt,
+      updatedAt: auditAt,
+    }, auditAt);
+    const reread = await service.show(value.caseKey);
+    expect(reread.dataHub.documentUrn).toBe(first.dataHub.documentUrn);
+    expect(reread.agentRuns).toEqual(withAudit.agentRuns);
+    expect(reread.agentRuns.some((run) => run.modelId === "live-datahub-writeback-proof")).toBe(true);
+    expect(JSON.stringify(reread.agentRuns)).not.toContain('"token":');
   } finally {
     await client.close();
   }

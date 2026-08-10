@@ -71,7 +71,7 @@ export function App({ client = httpWorkspaceClient }: { readonly client?: Worksp
   const [error, setError] = useState<string>();
   const [agentHealth, setAgentHealth] = useState<AgentHealth>();
   const [agentRun, setAgentRun] = useState<AgentRunSnapshot>();
-  const [agentPrompt, setAgentPrompt] = useState("Inspect this exact governed case, explain its blockers, and propose only the next necessary action. Never claim success without a verified tool result.");
+  const [agentPrompt, setAgentPrompt] = useState("Call readCase for this exact governed case. Then call generateRemediation for that exact case once to create its compatibility remediation. Do not call any other mutating tool. After its verified result, summarize and stop.");
 
   useEffect(() => {
     let active = true;
@@ -271,6 +271,16 @@ export function App({ client = httpWorkspaceClient }: { readonly client?: Worksp
             {current.validationReceipts.map((receipt) => <li key={receipt.receiptKey}><time>{receipt.finishedAt}</time><strong>Validation {receipt.valid ? "passed" : "failed"}</strong><span>Receipt {receipt.receiptKey.slice(0, 8)}</span></li>)}
             {current.dataHub.verified && current.dataHub.verifiedAt && current.dataHub.documentUrn && <li><time>{current.dataHub.verifiedAt}</time><strong>DataHub reread verified</strong><span>{shortUrn(current.dataHub.documentUrn)}</span></li>}
           </ol>
+          {current.agentRuns.length > 0 && <>
+            <h3 className="history-subheading">Agent execution audit</h3>
+            <ol className="timeline agent-audit-timeline" aria-label="Durable agent audit">
+              {current.agentRuns.flatMap((run) => run.events.map((event) => <li key={`${run.runId}-${event.sequence}`}>
+                <time>{event.at}</time>
+                <strong>{event.kind.replaceAll("_", " ")}</strong>
+                <span>{run.modelId} · {event.summary}</span>
+              </li>))}
+            </ol>
+          </>}
         </section>
       </main>
     </div>

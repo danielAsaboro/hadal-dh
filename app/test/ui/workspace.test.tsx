@@ -45,6 +45,39 @@ function caseValue(): ChangeCase {
 }
 
 describe("ChangeMarshal coordination workspace", () => {
+  it("renders token-free durable agent audit events from a reread DataHub case", async () => {
+    const value = caseValue();
+    const audited: ChangeCase = {
+      ...value,
+      agentRuns: [{
+        runId: "run-durable-1", caseKey: value.caseKey, revisionKey: value.revision.revisionKey,
+        headSha: value.revision.headSha, modelId: "qwen3.6-27b", status: "completed",
+        events: [
+          { kind: "run_started", sequence: 1, at: "2026-08-09T15:00:00.000Z", summary: "Governed run started" },
+          { kind: "tool_approved", sequence: 2, at: "2026-08-09T15:01:00.000Z", summary: "Approved exact arguments", toolName: "generateRemediation", toolCallId: "call-1", approvalId: "approval-1", argumentsHash: "a".repeat(64), approved: true },
+          { kind: "run_completed", sequence: 3, at: "2026-08-09T15:02:00.000Z", summary: "Governed run completed" },
+        ],
+        answer: "Verified remediation outcome",
+        createdAt: "2026-08-09T15:00:00.000Z", updatedAt: "2026-08-09T15:02:00.000Z",
+      }],
+    };
+    const client: WorkspaceClient = {
+      listCases: async () => [audited], getCase: async () => audited, sync: async () => audited,
+      reconcile: async () => audited, decide: async () => audited,
+      agentHealth: async () => ({ available: true, provider: "qvac", modelId: "qwen3.6-27b", managed: true }),
+      startAgent: async () => { throw new Error("not used"); },
+      approveAgent: async () => { throw new Error("not used"); },
+    };
+
+    render(<App client={client} />);
+
+    const audit = await screen.findByRole("list", { name: /durable agent audit/i });
+    expect(audit.textContent).toContain("qwen3.6-27b");
+    expect(audit.textContent).toContain("tool approved");
+    expect(audit.textContent).toContain("Approved exact arguments");
+    expect(screen.queryByRole("button", { name: /Approve generateRemediation/i })).toBeNull();
+  });
+
   it("renders governed evidence, work, approvals, blockers, and real projections", async () => {
     const value = caseValue();
     const client: WorkspaceClient = {
@@ -87,11 +120,12 @@ describe("ChangeMarshal coordination workspace", () => {
       pendingApproval: { token: "token-real-1", approvalId: "approval-1", toolCallId: "call-1", toolName: "generateRemediation", argumentsHash: "a".repeat(64), requestedAt: "2026-08-09T15:00:00.000Z", expiresAt: "2026-08-09T15:15:00.000Z" },
     };
     const approveAgent = vi.fn(async () => ({ ...pending, status: "completed" as const, pendingApproval: undefined }));
+    const startAgent = vi.fn(async () => pending);
     const client: WorkspaceClient = {
       listCases: async () => [value], getCase: async () => value, sync: async () => value,
       reconcile: async () => value, decide: async () => value,
       agentHealth: async () => ({ available: true, provider: "qvac", modelId: "qwen3.6-27b", managed: true }),
-      startAgent: async () => pending,
+      startAgent,
       approveAgent,
     };
     render(<App client={client} />);
@@ -99,6 +133,10 @@ describe("ChangeMarshal coordination workspace", () => {
     const run = await screen.findByRole("button", { name: /Run QVAC coordinator/i });
     fireEvent.click(run);
     const approve = await screen.findByRole("button", { name: /Approve generateRemediation/i });
+    expect(startAgent).toHaveBeenCalledWith(
+      value.caseKey,
+      expect.stringMatching(/compatibility remediation/i),
+    );
     expect(screen.getByText(/exact arguments hash/i)).not.toBeNull();
     fireEvent.click(approve);
     await waitFor(() => expect(approveAgent).toHaveBeenCalledWith(

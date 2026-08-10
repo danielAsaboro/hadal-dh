@@ -5,6 +5,8 @@ import { resolve } from "node:path";
 
 import type { CasesService, StatusSurface, WorkSurface } from "../application/cases";
 import type { AgentRunSnapshot } from "../ai/run-events";
+import { REMEDIATION_AGENT_TOOL_SEQUENCE, type AgentToolName } from "../ai/orchestrator";
+import { verifyGovernedAgentCaseScope } from "../ai/scope";
 import type { ChangeCase, ValidationReceipt } from "../domain/case";
 import { resolveRevision } from "../git/repository";
 import { generateCompatibilityMigration } from "../remediation/generate";
@@ -32,7 +34,9 @@ export interface ServerDependencies {
 
 export interface AgentRunApplication {
   health(): Promise<Readonly<{ available: true; provider: "qvac"; modelId: string; managed: boolean }>>;
-  start(input: Readonly<{ caseKey: string; headSha: string; prompt: string }>): Promise<AgentRunSnapshot>;
+  start(input: Readonly<{
+    caseKey: string; headSha: string; prompt: string; requiredToolSequence: readonly AgentToolName[];
+  }>): Promise<AgentRunSnapshot>;
   show(runId: string): Promise<AgentRunSnapshot>;
   resolveApproval(input: Readonly<{
     runId: string; token: string; currentHeadSha: string; approved: boolean; reason?: string;
@@ -62,21 +66,7 @@ async function verifyAgentCaseScope(dependencies: ServerDependencies, value: Cha
   if (dependencies.repoRoot === undefined || dependencies.agentScope === undefined) {
     throw new Error("QVAC agent repository scope is not configured");
   }
-  if (value.repository !== dependencies.agentScope.repository) {
-    throw new Error("governed case repository does not match the QVAC agent scope");
-  }
-  const [baseSha, headSha, currentHeadSha] = await Promise.all([
-    resolveRevision(dependencies.repoRoot, dependencies.agentScope.baseRef),
-    resolveRevision(dependencies.repoRoot, dependencies.agentScope.headRef),
-    resolveRevision(dependencies.repoRoot, "HEAD"),
-  ]);
-  if (value.revision.baseSha !== baseSha || value.revision.headSha !== headSha) {
-    throw new Error("governed case revision does not match the QVAC agent scope");
-  }
-  if (currentHeadSha !== headSha) {
-    throw new Error("repository HEAD changed after the governed QVAC scope was configured");
-  }
-  return currentHeadSha;
+  return await verifyGovernedAgentCaseScope({ repoRoot: dependencies.repoRoot, ...dependencies.agentScope }, value);
 }
 
 export function createServer(dependencies: ServerDependencies): FastifyInstance {
@@ -99,6 +89,7 @@ export function createServer(dependencies: ServerDependencies): FastifyInstance 
     const currentHeadSha = await verifyAgentCaseScope(dependencies, value);
     return await reply.status(202).send(await dependencies.agent.start({
       caseKey: value.caseKey, headSha: currentHeadSha, prompt: body.prompt,
+      requiredToolSequence: REMEDIATION_AGENT_TOOL_SEQUENCE,
     }));
   });
   server.get("/api/agent/runs/:runId", async (request, reply) => {

@@ -123,8 +123,8 @@ function integerEnv(value: string | undefined, fallback: number, label: string, 
 export function qvacConfigFromEnv(env: Environment = process.env): QvacRuntimeConfig {
   const mode = productEnv(env, "QVAC_MODE") ?? "managed";
   if (mode !== "managed" && mode !== "external") throw new ConfigError("CHANGEMARSHAL_QVAC_MODE must be managed or external");
-  const model = productEnv(env, "QVAC_MODEL") ?? "qwen3.5-4b";
-  const contextSize = integerEnv(productEnv(env, "QVAC_CONTEXT_SIZE"), 4096, "CHANGEMARSHAL_QVAC_CONTEXT_SIZE", 1024);
+  const model = productEnv(env, "QVAC_MODEL") ?? "qwen3.6-27b";
+  const contextSize = integerEnv(productEnv(env, "QVAC_CONTEXT_SIZE"), 16384, "CHANGEMARSHAL_QVAC_CONTEXT_SIZE", 1024);
   const reasoningBudget = integerEnv(productEnv(env, "QVAC_REASONING_BUDGET"), 0, "CHANGEMARSHAL_QVAC_REASONING_BUDGET", -1);
   if (mode === "managed") return { mode, model, contextSize, reasoningBudget };
   const baseUrl = productEnv(env, "QVAC_BASE_URL");

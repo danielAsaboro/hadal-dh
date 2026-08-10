@@ -53,6 +53,10 @@ const forbiddenWorkSurface: WorkSurface & StatusSurface = {
 
     const result = await agent.generate({
       prompt: "Call inspectDataHubImpact exactly once. Do not call a mutating tool. Then summarize the exact change, source URN, and downstream ML asset from its returned evidence.",
+      options: {
+        governedCaseKey: "0".repeat(24),
+        requiredToolSequence: ["inspectDataHubImpact"],
+      },
     });
 
     expect(result.toolCalls.map((call) => call.toolName)).toContain("inspectDataHubImpact");

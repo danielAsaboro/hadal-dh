@@ -11,6 +11,7 @@ import { createChangeMarshalAgent } from "../../src/ai/orchestrator";
 import { createQvacModel } from "../../src/ai/qvac";
 import { AgentRunCoordinator } from "../../src/ai/run-coordinator";
 import { adaptChangeMarshalAgent, GovernedAgentRunService } from "../../src/ai/run-service";
+import { toDurableAgentRun } from "../../src/ai/run-events";
 import { CasesService, type StatusSurface, type WorkSurface } from "../../src/application/cases";
 import { dataHubMcpConfigFromEnv, productEnv, qvacConfigFromEnv } from "../../src/config";
 import { DataHubCaseStore } from "../../src/datahub/case-store";
@@ -72,12 +73,18 @@ const forbiddenGitHub: WorkSurface & StatusSurface = {
       generator: adaptChangeMarshalAgent(agent),
       modelId: qvac.modelId,
       managed: qvac.managed,
+      persist: async (snapshot) => {
+        const current = await service.show(snapshot.caseKey);
+        const run = toDurableAgentRun(snapshot, current.revision.revisionKey);
+        await service.recordAgentRun(snapshot.caseKey, run, run.updatedAt);
+      },
     });
 
     const pending = await runs.start({
       caseKey: value.caseKey,
       headSha: value.revision.headSha,
       prompt: `Call readCase for ${value.caseKey}. Then call generateRemediation for that exact case once. Do not call any other mutating tool. After its verified result, summarize and stop.`,
+      requiredToolSequence: ["readCase", "generateRemediation"],
     });
     expect(pending.status).toBe("waiting_for_approval");
     expect(pending.pendingApproval?.toolName).toBe("generateRemediation");

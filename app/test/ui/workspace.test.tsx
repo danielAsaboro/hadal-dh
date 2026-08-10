@@ -100,6 +100,16 @@ describe("ChangeMarshal coordination workspace", () => {
     expect(listCases).not.toHaveBeenCalled();
   });
 
+  it("names the public landmark and keeps its primary navigation keyboard reachable", () => {
+    render(<App client={clientFor(caseValue())} sessionClient={localSessionClient} initialPath="/" />);
+
+    expect(screen.getByRole("main", { name: /turn graph evidence into coordinated, accountable, validated work/i })).not.toBeNull();
+    const navigation = screen.getByRole("navigation", { name: /landing navigation/i });
+    expect(within(navigation).getByRole("link", { name: /how it works/i }).getAttribute("href")).toBe("#method");
+    expect(within(navigation).getByRole("link", { name: /why it matters/i }).getAttribute("href")).toBe("#principles");
+    expect(screen.getByRole("link", { name: /enter governed workspace/i }).tabIndex).toBe(0);
+  });
+
   it("enters the workspace through History API navigation", async () => {
     const value = caseValue();
     const listCases = vi.fn(async () => [value]);
@@ -203,6 +213,15 @@ describe("ChangeMarshal coordination workspace", () => {
     expect(passphrase.getAttribute("type")).toBe("password");
     expect(screen.getByRole("button", { name: /sign in to workspace/i })).not.toBeNull();
     expect(listCases).not.toHaveBeenCalled();
+  });
+
+  it("names the sign-in landmark from its visible operator heading", async () => {
+    const value = caseValue();
+    const sessionClient = { ...localSessionClient, read: async () => ({ configured: true, authenticated: false }) };
+
+    render(<App client={clientFor(value)} sessionClient={sessionClient} initialPath="/workspace" />);
+
+    expect(await screen.findByRole("main", { name: /operator sign-in/i })).not.toBeNull();
   });
 
   it("fails closed when an unconfigured session is reported unauthenticated", async () => {
@@ -338,6 +357,39 @@ describe("ChangeMarshal coordination workspace", () => {
     expect(screen.queryByRole("button", { name: /Approve as/i })).toBeNull();
     expect(screen.getByRole("link", { name: /Open GitHub issue/i }).getAttribute("href"))
       .toBe("https://github.com/acme/warehouse/issues/1");
+  });
+
+  it("names workspace landmarks and exposes canonical and action state as live text", async () => {
+    const value = caseValue();
+    let finishSync: ((next: ChangeCase) => void) | undefined;
+    const syncResult = new Promise<ChangeCase>((resolve) => { finishSync = resolve; });
+    render(<App
+      client={clientFor(value, { sync: async () => await syncResult })}
+      sessionClient={localSessionClient}
+      initialPath="/workspace"
+    />);
+
+    const workspace = await screen.findByRole("main", { name: /customers governed change/i });
+    expect(screen.getByRole("navigation", { name: /governed case navigation/i })).not.toBeNull();
+    const sections = within(workspace).getByRole("navigation", { name: /case sections/i });
+    expect(within(sections).getByRole("link", { name: /graph/i }).getAttribute("href")).toBe("#execution-graph");
+
+    const canonical = screen.getByRole("status", { name: /canonical DataHub context/i });
+    expect(canonical.getAttribute("aria-live")).toBe("polite");
+    expect(canonical.textContent).toMatch(/✓.*DataHub canonical/i);
+
+    const actions = within(workspace).getByRole("region", { name: /case actions/i });
+    const sync = within(actions).getByRole("button", { name: /sync owner work/i });
+    expect(sync.tabIndex).toBe(0);
+    const actionStatus = within(actions).getByRole("status", { name: /case action status/i });
+    expect(actionStatus.getAttribute("aria-live")).toBe("polite");
+    expect(actionStatus.textContent).toMatch(/case actions ready/i);
+
+    fireEvent.click(sync);
+    expect(actions.getAttribute("aria-busy")).toBe("true");
+    expect(actionStatus.textContent).toMatch(/syncing owner work/i);
+    finishSync?.(value);
+    await waitFor(() => expect(actions.getAttribute("aria-busy")).toBe("false"));
   });
 
   it.each([

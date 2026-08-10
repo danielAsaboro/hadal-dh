@@ -195,16 +195,25 @@ export function Workspace({ client = httpWorkspaceClient }: { readonly client?: 
 
   const runCase = agentRun === undefined ? undefined : cases.find((item) => item.caseKey === agentRun.caseKey);
   const visibleRun = runCase === undefined ? undefined : agentRun;
+  const actionStatus = busy === "sync"
+    ? "Syncing owner work…"
+    : busy === "reconcile"
+      ? "Reconciling GitHub…"
+      : busy === "decide"
+        ? "Verifying merge decision…"
+        : busy === undefined
+          ? "Case actions ready"
+          : "Another governed operation is in progress…";
 
   return (
     <div className="workspace-shell">
       <CaseRail cases={cases} current={current} disabled={busy !== undefined} onSelect={(caseKey) => void selectCase(caseKey)} />
 
-      <main className="case-main">
+      <main className="case-main" aria-labelledby="case-title">
         <header className="case-header" id="overview">
           <div>
             <p className="eyebrow">{current.repository} · {current.caseKey}</p>
-            <h1>{current.change.modelName} governed change</h1>
+            <h1 id="case-title">{current.change.modelName} governed change</h1>
             <p className="change-line" aria-label={`${current.change.oldName} → ${current.change.newName}`}><code>{current.change.oldName}</code><span>→</span><code>{current.change.newName}</code></p>
           </div>
           <div className="header-state"><StatePill value={current.state} /><span className="sha">{current.revision.headSha}</span></div>
@@ -217,7 +226,8 @@ export function Workspace({ client = httpWorkspaceClient }: { readonly client?: 
 
         {error && <div className="error-banner" role="alert"><strong>Not verified.</strong> {error}</div>}
 
-        <section className="command-bar" aria-label="Case actions">
+        <section className="command-bar" aria-label="Case actions" aria-busy={busy !== undefined}>
+          <span className="sr-only" role="status" aria-label="Case action status" aria-live="polite">{actionStatus}</span>
           <button disabled={busy !== undefined} onClick={() => void mutate("sync", () => client.sync(current.caseKey))}>{busy === "sync" ? "Syncing owner work…" : "Sync owner work"}</button>
           <button disabled={busy !== undefined} onClick={() => void mutate("reconcile", () => client.reconcile(current.caseKey))}>{busy === "reconcile" ? "Reconciling GitHub…" : "Reconcile GitHub"}</button>
           <button className="primary-action" disabled={busy !== undefined} onClick={() => void mutate("decide", () => client.decide(current.caseKey, window.location.href))}>

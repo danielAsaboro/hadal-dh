@@ -16,7 +16,7 @@ export function LandingPage({ onEnterWorkspace }: LandingPageProps) {
         </nav>
       </header>
 
-      <main id="top">
+      <main id="top" aria-labelledby="landing-title">
         <section className="landing-hero" aria-labelledby="landing-title">
           <p className="eyebrow">Metadata-aware change coordination</p>
           <h1 id="landing-title">Turn graph evidence into coordinated, accountable, validated work.</h1>

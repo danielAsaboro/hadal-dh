@@ -10,7 +10,7 @@ export function CaseRail({ cases, current, disabled, onSelect }: Readonly<{
     <aside className="case-rail" aria-label="Change cases">
       <div className="brand-lockup"><span className="cut-mark">CM/</span><span>ChangeMarshal</span></div>
       <p className="rail-label">Governed changes</p>
-      <nav>
+      <nav aria-label="Governed case navigation">
         {cases.map((item) => (
           <button
             className={item.caseKey === current.caseKey ? "case-link active" : "case-link"}
@@ -23,7 +23,10 @@ export function CaseRail({ cases, current, disabled, onSelect }: Readonly<{
           </button>
         ))}
       </nav>
-      <div className="rail-foot"><span className="pulse-dot" /> DataHub canonical</div>
+      <div className="rail-foot" role="status" aria-label="Canonical DataHub context" aria-live="polite">
+        <span className="canonical-icon" aria-hidden="true">✓</span>
+        <span>DataHub canonical</span>
+      </div>
     </aside>
   );
 }

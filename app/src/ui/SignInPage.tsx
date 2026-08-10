@@ -25,7 +25,7 @@ export function SignInPage({ onSignIn }: SignInPageProps) {
   };
 
   return (
-    <main className="sign-in-page">
+    <main className="sign-in-page" aria-labelledby="sign-in-title">
       <section aria-labelledby="sign-in-title">
         <div className="brand-lockup"><span className="cut-mark">CM/</span><span>ChangeMarshal</span></div>
         <p className="eyebrow">Governed operator access</p>

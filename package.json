@@ -10,6 +10,7 @@
     "dev": "npm --workspace app run dev",
     "demo": "npm --workspace app run demo",
     "serve": "npm --workspace app run serve",
+    "smoke:qvac": "npm --workspace app run smoke:qvac",
     "test": "npm --workspace app run test",
     "typecheck": "npm --workspace app run typecheck"
   }

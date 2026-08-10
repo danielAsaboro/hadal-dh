@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { Background, Controls, MiniMap, ReactFlow, type NodeMouseHandler } from "@xyflow/react";
+import { useEffect, useMemo, useState } from "react";
+import { Background, Controls, MiniMap, ReactFlow, type NodeMouseHandler, useNodesState } from "@xyflow/react";
 
 import type { AgentRunSnapshot } from "../ai/run-events";
 import type { ChangeCase } from "../domain/case";
@@ -10,8 +10,10 @@ const nodeTypes = { changeStage: FlowNode };
 
 export function ChangeFlow({ value, run }: Readonly<{ value: ChangeCase; run?: AgentRunSnapshot }>) {
   const flow = useMemo(() => projectCaseFlow(value, run), [value, run]);
+  const [nodes, setNodes, onNodesChange] = useNodesState<ChangeNode>(flow.nodes);
   const [selectedId, setSelectedId] = useState("decision");
-  const selected = flow.nodes.find((node) => node.id === selectedId) ?? flow.nodes[0]!;
+  useEffect(() => setNodes(flow.nodes), [flow.nodes, setNodes]);
+  const selected = nodes.find((node) => node.id === selectedId) ?? nodes[0]!;
   const selectNode: NodeMouseHandler<ChangeNode> = (_event, node) => setSelectedId(node.id);
 
   return (
@@ -23,15 +25,15 @@ export function ChangeFlow({ value, run }: Readonly<{ value: ChangeCase; run?: A
       <div className="flow-grid">
         <div className="flow-canvas">
           <ReactFlow<ChangeNode>
-            nodes={flow.nodes}
+            nodes={nodes}
             edges={flow.edges}
             nodeTypes={nodeTypes}
+            onNodesChange={onNodesChange}
             onNodeClick={selectNode}
-            fitView
-            fitViewOptions={{ padding: 0.16 }}
+            defaultViewport={{ x: 24, y: 150, zoom: 0.62 }}
             minZoom={0.32}
             maxZoom={1.35}
-            nodesDraggable={false}
+            nodesDraggable
             nodesConnectable={false}
             elementsSelectable
             nodesFocusable

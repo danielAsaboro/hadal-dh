@@ -48,7 +48,7 @@ function stageNodes(value: ChangeCase, run?: AgentRunSnapshot): ChangeNode[] {
     { id: "decision", data: { eyebrow: "Policy authority", label: "Merge decision", status: statusFor("publishMergeDecision", value.admission === undefined ? "waiting" : value.admission.allowed ? "verified" : "blocked"), detail: value.admission?.allowed ? "Allowed" : `${value.admission?.blockers.length ?? 1} blocker${value.admission?.blockers.length === 1 ? "" : "s"}` } },
     { id: "resolution", data: { eyebrow: "Institutional memory", label: "DataHub resolution", status: value.dataHub.verified && value.admission !== undefined ? "verified" : "waiting", detail: value.dataHub.verified ? "Reread verified" : "Write-back pending" } },
   ];
-  return values.map(({ id, data }) => ({ id, type: "changeStage", data, position: { x: 0, y: 0 }, sourcePosition: Position.Right, targetPosition: Position.Left, draggable: false, connectable: false, selectable: true, focusable: true, ariaLabel: `${data.label}: ${data.status}. ${data.detail}` }));
+  return values.map(({ id, data }) => ({ id, type: "changeStage", data, position: { x: 0, y: 0 }, sourcePosition: Position.Right, targetPosition: Position.Left, draggable: true, connectable: false, selectable: true, focusable: true, ariaLabel: `${data.label}: ${data.status}. ${data.detail}` }));
 }
 
 export function projectCaseFlow(value: ChangeCase, run?: AgentRunSnapshot): Readonly<{

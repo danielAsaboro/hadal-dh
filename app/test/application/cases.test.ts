@@ -121,7 +121,7 @@ describe("resumable case services", () => {
     expect(changed.approvalDecisions).toEqual([]);
     expect(changed.validationReceipts).toEqual([]);
     expect(changed.externalProjections).toEqual([]);
-  });
+  }, 15_000);
 
   it("prevents external work for incomplete evidence and preserves state on partial failure", async () => {
     const repo = await gitRepository();

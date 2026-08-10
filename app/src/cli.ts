@@ -9,9 +9,10 @@ import { Command } from "commander";
 import { CoordinationBriefError, coordinationModel, generateCoordinationBrief } from "./ai/coordination-brief";
 import { createAgentOperations } from "./ai/operations";
 import { createChangeMarshalAgent } from "./ai/orchestrator";
+import { createQvacModel } from "./ai/qvac";
 import { CasesService, CasesServiceError, type EvidenceSource } from "./application/cases";
 import { AtomicCaseReplica } from "./application/replica";
-import { aiConfigFromEnv, ConfigError, dataHubMcpConfigFromEnv, githubConfigFromEnv, parseCommand, warnLegacyProductEnv } from "./config";
+import { aiConfigFromEnv, ConfigError, dataHubMcpConfigFromEnv, githubConfigFromEnv, parseCommand, qvacConfigFromEnv, warnLegacyProductEnv } from "./config";
 import { DataHubCaseStore, DataHubCaseStoreError } from "./datahub/case-store";
 import { collectEvidence, DataHubEvidenceError } from "./datahub/evidence";
 import { DataHubMcpClient, DataHubMcpError } from "./datahub/mcp-client";
@@ -217,7 +218,9 @@ export function buildCli(): Command {
       map: string[]; validationCommandJson: string; artifact: string[]; maxHops: string; output: string;
     }) => {
       const value = await runtime(options.output);
+      let qvac: Awaited<ReturnType<typeof createQvacModel>> | undefined;
       try {
+        qvac = await createQvacModel(qvacConfigFromEnv());
         const connector = githubConnector();
         const scope = {
           repoRoot: resolve(options.repo),
@@ -231,7 +234,7 @@ export function buildCli(): Command {
           artifactPaths: options.artifact,
         };
         const agent = createChangeMarshalAgent({
-          model: coordinationModel(aiConfigFromEnv()),
+          model: qvac.model,
           scope,
           operations: createAgentOperations({
             scope,
@@ -245,6 +248,7 @@ export function buildCli(): Command {
         // than a no-call-options ToolLoopAgent under exactOptionalPropertyTypes.
         await runAgentTUI({ title: "ChangeMarshal", agent: agent as AgentTUIAgent, tools: "full", reasoning: "collapsed" });
       } finally {
+        if (qvac !== undefined) await qvac.close();
         await value.client.close();
       }
     });

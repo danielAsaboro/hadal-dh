@@ -18,6 +18,7 @@ type MutableRun = {
   modelId: string;
   status: AgentRunSnapshot["status"];
   events: AgentRunEvent[];
+  answer?: string;
   pendingApproval?: AgentRunSnapshot["pendingApproval"];
 };
 
@@ -65,6 +66,49 @@ export class AgentRunCoordinator {
 
   show(runId: string): AgentRunSnapshot {
     return this.#snapshot(this.#run(runId));
+  }
+
+  toolProposed(runId: string, call: Readonly<{ toolName: string; toolCallId: string }>): AgentRunSnapshot {
+    const run = this.#activeRun(runId);
+    this.#append(run, { kind: "tool_proposed", summary: `Model proposed ${call.toolName}`, ...call });
+    return this.#snapshot(run);
+  }
+
+  toolStarted(runId: string, call: Readonly<{ toolName: string; toolCallId: string }>): AgentRunSnapshot {
+    const run = this.#activeRun(runId);
+    this.#append(run, { kind: "tool_started", summary: `Started ${call.toolName}`, ...call });
+    return this.#snapshot(run);
+  }
+
+  toolCompleted(runId: string, call: Readonly<{ toolName: string; toolCallId: string }>): AgentRunSnapshot {
+    const run = this.#activeRun(runId);
+    this.#append(run, { kind: "tool_completed", summary: `Completed ${call.toolName}`, ...call });
+    return this.#snapshot(run);
+  }
+
+  toolFailed(runId: string, call: Readonly<{ toolName: string; toolCallId: string; summary: string }>): AgentRunSnapshot {
+    const run = this.#activeRun(runId);
+    this.#append(run, { kind: "tool_failed", ...call });
+    return this.#snapshot(run);
+  }
+
+  complete(runId: string, answer: string): AgentRunSnapshot {
+    const run = this.#activeRun(runId);
+    const groundedAnswer = answer.trim();
+    if (groundedAnswer.length === 0) throw new AgentRunError("agent completed without an answer");
+    run.answer = groundedAnswer.slice(0, 20_000);
+    this.#append(run, { kind: "answer_emitted", summary: "Grounded agent answer emitted" });
+    run.status = "completed";
+    this.#append(run, { kind: "run_completed", summary: "Governed run completed" });
+    return this.#snapshot(run);
+  }
+
+  fail(runId: string, summary: string): AgentRunSnapshot {
+    const run = this.#activeRun(runId);
+    delete run.pendingApproval;
+    run.status = "failed";
+    this.#append(run, { kind: "run_failed", summary });
+    return this.#snapshot(run);
   }
 
   requireApproval(runId: string, call: Readonly<{
@@ -115,6 +159,14 @@ export class AgentRunCoordinator {
     return value;
   }
 
+  #activeRun(runId: string): MutableRun {
+    const run = this.#run(runId);
+    if (run.status === "completed" || run.status === "failed") {
+      throw new AgentRunError(`agent run ${runId} is terminal`);
+    }
+    return run;
+  }
+
   #append(run: MutableRun, event: Omit<AgentRunEvent, "sequence" | "at">): void {
     run.events.push({ ...event, sequence: run.events.length + 1, at: this.#now().toISOString() });
   }
@@ -123,6 +175,7 @@ export class AgentRunCoordinator {
     return AgentRunSnapshotSchema.parse({
       runId: run.runId, caseKey: run.caseKey, headSha: run.headSha, modelId: run.modelId,
       status: run.status, events: structuredClone(run.events),
+      ...(run.answer === undefined ? {} : { answer: run.answer }),
       ...(run.pendingApproval === undefined ? {} : { pendingApproval: structuredClone(run.pendingApproval) }),
     });
   }

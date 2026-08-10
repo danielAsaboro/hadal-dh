@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { aiConfigFromEnv, ConfigError, dataHubMcpConfigFromEnv, githubConfigFromEnv, parseCommand, qvacConfigFromEnv, warnLegacyProductEnv } from "../src/config";
+import { agentScopeFromEnv, aiConfigFromEnv, ConfigError, dataHubMcpConfigFromEnv, githubConfigFromEnv, parseCommand, qvacConfigFromEnv, warnLegacyProductEnv } from "../src/config";
 
 describe("runtime configuration", () => {
   it("builds explicit real MCP HTTP and stdio configurations", () => {
@@ -66,11 +66,11 @@ describe("runtime configuration", () => {
     expect(() => aiConfigFromEnv({ CHANGEMARSHAL_AI_MODEL: "missing-transport" })).toThrow(/AI_BASE_URL/i);
   });
 
-  it("defaults QVAC to a managed 27B tool-capable local model", () => {
+  it("defaults QVAC to the managed local model proven by the live flow", () => {
     expect(qvacConfigFromEnv({})).toEqual({
       mode: "managed",
-      model: "qwen3.6-27b",
-      contextSize: 32768,
+      model: "qwen3.5-4b",
+      contextSize: 4096,
       reasoningBudget: 0,
     });
   });
@@ -86,10 +86,29 @@ describe("runtime configuration", () => {
       baseUrl: "http://127.0.0.1:11435/v1",
       apiKey: "local-only",
       model: "qwen3.6-35b-a3b",
-      contextSize: 32768,
+      contextSize: 4096,
       reasoningBudget: 0,
     });
     expect(() => qvacConfigFromEnv({ CHANGEMARSHAL_QVAC_MODE: "external" })).toThrow(/QVAC_BASE_URL/i);
+  });
+
+  it("builds a fixed fail-closed web agent scope from explicit environment values", () => {
+    expect(agentScopeFromEnv("/real/repository", {
+      CHANGEMARSHAL_AGENT_REPOSITORY: "acme/warehouse",
+      CHANGEMARSHAL_AGENT_BASE_REF: "main",
+      CHANGEMARSHAL_AGENT_HEAD_REF: "HEAD",
+      CHANGEMARSHAL_AGENT_TARGET_URL: "http://127.0.0.1:4100/",
+      CHANGEMARSHAL_AGENT_OWNER_MAPPINGS_JSON: '[["urn:li:corpuser:owner","owner-gh"]]',
+      CHANGEMARSHAL_AGENT_VALIDATION_COMMAND_JSON: '["npm","test"]',
+      CHANGEMARSHAL_AGENT_ARTIFACT_PATHS_JSON: '["models/customers.sql"]',
+      CHANGEMARSHAL_AGENT_MAX_HOPS: "4",
+    })).toEqual({
+      repoRoot: "/real/repository", repository: "acme/warehouse", baseRef: "main", headRef: "HEAD",
+      targetUrl: "http://127.0.0.1:4100/", maxHops: 4,
+      ownerMappings: [["urn:li:corpuser:owner", "owner-gh"]],
+      validationCommand: ["npm", "test"], artifactPaths: ["models/customers.sql"],
+    });
+    expect(() => agentScopeFromEnv("/real/repository", {})).toThrow(/AGENT_REPOSITORY/i);
   });
 
   it("emits one actionable warning for legacy environment variables", () => {

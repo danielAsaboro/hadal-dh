@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 
+import { AgentRunSnapshotSchema, type AgentRunSnapshot } from "../ai/run-events";
 import { ChangeCaseSchema, type ChangeCase } from "../domain/case";
 import { ChangeFlow } from "./ChangeFlow";
+
+type AgentHealth = Readonly<{ available: true; provider: "qvac"; modelId: string; managed: boolean }>;
 
 export interface WorkspaceClient {
   listCases(): Promise<readonly ChangeCase[]>;
@@ -9,6 +12,9 @@ export interface WorkspaceClient {
   sync(caseKey: string): Promise<ChangeCase>;
   reconcile(caseKey: string): Promise<ChangeCase>;
   decide(caseKey: string, targetUrl: string): Promise<ChangeCase>;
+  agentHealth(): Promise<AgentHealth>;
+  startAgent(caseKey: string, prompt: string): Promise<AgentRunSnapshot>;
+  approveAgent(runId: string, token: string, approved: boolean, reason: string): Promise<AgentRunSnapshot>;
 }
 
 async function request(path: string, init?: RequestInit): Promise<unknown> {
@@ -34,6 +40,14 @@ export const httpWorkspaceClient: WorkspaceClient = {
   decide: async (key, targetUrl) => ChangeCaseSchema.parse(await request(`/api/cases/${key}/decide`, {
     method: "POST", body: JSON.stringify({ targetUrl }),
   })),
+  agentHealth: async () => await request("/api/agent/health") as AgentHealth,
+  startAgent: async (caseKey, prompt) => AgentRunSnapshotSchema.parse(await request("/api/agent/runs", {
+    method: "POST", body: JSON.stringify({ caseKey, prompt }),
+  })),
+  approveAgent: async (runId, token, approved, reason) => AgentRunSnapshotSchema.parse(await request(
+    `/api/agent/runs/${runId}/approvals/${token}`,
+    { method: "POST", body: JSON.stringify({ approved, reason }) },
+  )),
 };
 
 function shortUrn(urn: string): string {
@@ -55,6 +69,9 @@ export function App({ client = httpWorkspaceClient }: { readonly client?: Worksp
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string>();
   const [error, setError] = useState<string>();
+  const [agentHealth, setAgentHealth] = useState<AgentHealth>();
+  const [agentRun, setAgentRun] = useState<AgentRunSnapshot>();
+  const [agentPrompt, setAgentPrompt] = useState("Inspect this exact governed case, explain its blockers, and propose only the next necessary action. Never claim success without a verified tool result.");
 
   useEffect(() => {
     let active = true;
@@ -71,6 +88,12 @@ export function App({ client = httpWorkspaceClient }: { readonly client?: Worksp
     return () => { active = false; };
   }, [client]);
 
+  useEffect(() => {
+    let active = true;
+    void client.agentHealth().then((value) => { if (active) setAgentHealth(value); }).catch(() => undefined);
+    return () => { active = false; };
+  }, [client]);
+
   const decisions = useMemo(() => new Map(current?.approvalDecisions.map((item) => [item.requirementKey, item])), [current]);
   const projections = useMemo(() => new Map(current?.externalProjections.map((item) => [item.workKey, item])), [current]);
   const receipts = useMemo(() => new Map(current?.validationReceipts.map((item) => [item.workKey, item])), [current]);
@@ -84,6 +107,37 @@ export function App({ client = httpWorkspaceClient }: { readonly client?: Worksp
       setCases((existing) => existing.map((item) => item.caseKey === value.caseKey ? value : item));
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Operation failed without verified completion");
+    } finally {
+      setBusy(undefined);
+    }
+  };
+
+  const coordinate = async () => {
+    if (current === undefined || agentHealth === undefined) return;
+    setBusy("agent");
+    setError(undefined);
+    try {
+      setAgentRun(await client.startAgent(current.caseKey, agentPrompt));
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "QVAC run failed without verified completion");
+    } finally {
+      setBusy(undefined);
+    }
+  };
+
+  const resolveAgentApproval = async (approved: boolean) => {
+    const pending = agentRun?.pendingApproval;
+    if (current === undefined || agentRun === undefined || pending === undefined) return;
+    setBusy("agent-approval");
+    setError(undefined);
+    try {
+      setAgentRun(await client.approveAgent(
+        agentRun.runId, pending.token, approved,
+        approved ? "Approved in ChangeMarshal command center" : "Denied in ChangeMarshal command center",
+      ));
+      setCurrent(await client.getCase(current.caseKey));
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Agent approval did not complete");
     } finally {
       setBusy(undefined);
     }
@@ -130,7 +184,27 @@ export function App({ client = httpWorkspaceClient }: { readonly client?: Worksp
           </button>
         </section>
 
-        <ChangeFlow value={current} />
+        <section className="agent-console" aria-label="QVAC coordination controls">
+          <div className="agent-console-copy">
+            <p className="eyebrow">Local AI · governed tools</p>
+            <h2>{agentHealth === undefined ? "QVAC runtime unavailable" : `${agentHealth.modelId} coordinator`}</h2>
+            <textarea aria-label="QVAC coordination request" value={agentPrompt} onChange={(event) => setAgentPrompt(event.target.value)} rows={3} />
+          </div>
+          <button className="agent-run-button" disabled={busy !== undefined || agentHealth === undefined || agentPrompt.trim().length === 0} onClick={() => void coordinate()}>
+            {busy === "agent" ? "Running real model…" : "Run QVAC coordinator"}
+          </button>
+          {agentRun?.pendingApproval && <div className="agent-approval-card" role="group" aria-label={`Approval required for ${agentRun.pendingApproval.toolName}`}>
+            <div><p className="eyebrow">Human mutation gate</p><h3>{agentRun.pendingApproval.toolName}</h3><p>Exact arguments hash <code>{agentRun.pendingApproval.argumentsHash.slice(0, 16)}…</code> · head <code>{agentRun.headSha.slice(0, 10)}</code></p></div>
+            <div className="agent-approval-buttons">
+              <button disabled={busy !== undefined} onClick={() => void resolveAgentApproval(false)}>Deny {agentRun.pendingApproval.toolName}</button>
+              <button className="primary-action" disabled={busy !== undefined} onClick={() => void resolveAgentApproval(true)}>Approve {agentRun.pendingApproval.toolName}</button>
+            </div>
+          </div>}
+          {agentRun?.answer && <article className="agent-answer"><p className="eyebrow">Grounded model response</p><p>{agentRun.answer}</p></article>}
+          {agentRun && <ol className="agent-events" aria-label="Agent audit events">{agentRun.events.map((event) => <li key={event.sequence}><span>{String(event.sequence).padStart(2, "0")}</span><strong>{event.kind.replaceAll("_", " ")}</strong><small>{event.summary}</small></li>)}</ol>}
+        </section>
+
+        <ChangeFlow value={current} {...(agentRun === undefined ? {} : { run: agentRun })} />
 
         <section className="metric-grid" aria-label="Case summary">
           <article><span>Graph paths</span><strong>{current.evidence.paths.length}</strong></article>

@@ -11,6 +11,7 @@ from datahub.metadata.schema_classes import (
     QuerySubjectClass,
 )
 from datahub.metadata.urns import QueryUrn, SchemaFieldUrn
+from datahub.sdk import Document
 from datahub.sdk.dataflow import DataFlow
 from datahub.sdk.datajob import DataJob
 from datahub.sdk.dataset import Dataset
@@ -134,6 +135,18 @@ def build_demo_entities() -> Sequence[Entity]:
             str(SchemaFieldUrn(customers.urn, "email")),
         ),
     )
+    demo_context = Document.create_document(
+        id="changemarshal-demo-context",
+        title="ChangeMarshal controlled demo context",
+        text=(
+            "This document describes the controlled ChangeMarshal hackathon graph. "
+            "It exists so the official DataHub MCP server exposes document search "
+            "before the first governed change case is written."
+        ),
+        subtype="Context",
+        related_assets=[customers.urn],
+        show_in_global_context=True,
+    )
     return (
         risk_tag,
         customer_tag,
@@ -145,6 +158,7 @@ def build_demo_entities() -> Sequence[Entity]:
         training_job,
         churn_model,
         usage_query,
+        demo_context,
     )
 
 

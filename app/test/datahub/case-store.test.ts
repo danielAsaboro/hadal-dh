@@ -11,7 +11,6 @@ import type { DataHubToolCaller } from "../../src/datahub/evidence";
 
 const source = "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.customers,PROD)";
 const consumer = "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.orders,PROD)";
-const documentUrn = "urn:li:document:cutset-governed-case";
 
 function changeCase() {
   const context = (urn: string, name: string, owner: string) => ({
@@ -39,6 +38,8 @@ function changeCase() {
     },
   });
 }
+
+const documentUrn = `urn:li:document:changemarshal-change-case-${changeCase().caseKey}`;
 
 class CapturedDocumentService implements DataHubToolCaller {
   readonly documents = new Map<string, { title: string; content: string }>();
@@ -93,6 +94,7 @@ describe("DataHub case persistence", () => {
     expect(second.dataHub.documentUrn).toBe(documentUrn);
     expect(service.documents.size).toBe(1);
     expect(service.saves).toHaveLength(4);
+    expect(service.saves[0]?.urn).toBe(documentUrn);
     expect(service.saves[0]?.related_assets).toEqual([source, consumer].sort());
     expect(service.saves.slice(1).every((save) => save.urn === documentUrn)).toBe(true);
     expect(await store.findCase(first.caseKey)).toBe(documentUrn);
@@ -174,7 +176,7 @@ describe("DataHub case persistence", () => {
 
     expect(saved.dataHub.documentUrn).toBe(documentUrn);
     expect(service.documents.size).toBe(2);
-    expect(service.saves[0]).not.toHaveProperty("urn");
+    expect(service.saves[0]?.urn).toBe(documentUrn);
   });
 
   it("rejects mutation failure and truncated or mismatched rereads", async () => {

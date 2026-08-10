@@ -26,9 +26,10 @@ def test_demo_entities_encode_dataset_column_and_model_training_lineage() -> Non
         "urn:li:dataJob:(urn:li:dataFlow:(airflow,cutset-demo,PROD),train-churn)",
         "urn:li:mlModel:(urn:li:dataPlatform:mlflow,churn_prediction_v2,PROD)",
         "urn:li:query:cutset-customer-feature-extraction",
+        "urn:li:document:changemarshal-demo-context",
     ]
 
-    source, features, _flow, job, model, query = entities[4:]
+    source, features, _flow, job, model, query = entities[4:10]
     source_schema = source._get_aspect(SchemaMetadataClass)
     assert source_schema is not None
     assert [field.fieldPath for field in source_schema.fields] == ["customer_id", "email"]

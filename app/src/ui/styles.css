@@ -38,6 +38,23 @@ h3 { margin: 10px 0 5px; font-size: 14px; }
 .command-bar { display: flex; gap: 8px; padding: 10px; border: 1px solid #272b35; background: rgba(19,22,29,.75); border-radius: 12px; }
 .command-bar button, .approval-actions button { border: 1px solid #343947; background: #20242d; color: #cbd1dd; border-radius: 8px; padding: 9px 12px; font-weight: 650; }
 .command-bar .primary-action { margin-left: auto; background: #d6ff57; color: #11130e; border-color: #d6ff57; }
+.agent-console { margin-top: 14px; padding: 18px; border: 1px solid #37402b; border-radius: 14px; background: linear-gradient(135deg, rgba(30,35,25,.94), rgba(15,18,20,.96)); display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 14px 18px; align-items: end; }
+.agent-console-copy p { margin: 0; }
+.agent-console-copy textarea { width: 100%; margin-top: 12px; resize: vertical; border: 1px solid #394232; border-radius: 9px; padding: 11px 12px; background: #10140f; color: #cdd5c3; font: 12px/1.5 ui-monospace, monospace; }
+.agent-run-button, .agent-approval-buttons button { border: 1px solid #708334; border-radius: 9px; padding: 11px 14px; background: #d6ff57; color: #11130e; font-weight: 800; }
+.agent-approval-card { grid-column: 1 / -1; border-top: 1px solid #394232; padding-top: 14px; display: flex; align-items: center; justify-content: space-between; gap: 18px; }
+.agent-approval-card p { margin: 5px 0 0; color: #8f9987; font-size: 11px; }
+.agent-approval-card code { color: #d6ff57; }
+.agent-approval-buttons { display: flex; gap: 8px; }
+.agent-approval-buttons button:first-child { border-color: #653e39; background: #29191a; color: #ff9a8e; }
+.agent-answer { grid-column: 1 / -1; border: 1px solid #394232; border-radius: 9px; padding: 13px; background: rgba(10,13,11,.62); }
+.agent-answer p { margin: 0; color: #b8c2b1; font-size: 12px; line-height: 1.55; white-space: pre-wrap; }
+.agent-answer .eyebrow { margin-bottom: 7px; color: #d6ff57; font-size: 9px; }
+.agent-events { grid-column: 1 / -1; list-style: none; padding: 0; margin: 0; display: grid; gap: 4px; }
+.agent-events li { display: grid; grid-template-columns: 28px 150px minmax(0,1fr); gap: 8px; padding: 7px 9px; border-radius: 7px; background: rgba(10,13,11,.45); font-size: 10px; }
+.agent-events li span { color: #687161; font-family: ui-monospace, monospace; }
+.agent-events li strong { color: #b9c3af; text-transform: uppercase; letter-spacing: .07em; }
+.agent-events li small { color: #7e8977; }
 .flow-command-center { margin-top: 20px; border: 1px solid #2a303c; border-radius: 16px; overflow: hidden; background: linear-gradient(145deg, rgba(20,24,32,.98), rgba(11,14,20,.96)); box-shadow: 0 26px 90px rgba(0,0,0,.24); }
 .flow-heading { height: 66px; padding: 14px 18px; border-bottom: 1px solid #2a303c; display: flex; align-items: center; justify-content: space-between; }
 .flow-heading p { margin: 0; }
@@ -129,6 +146,9 @@ h3 { margin: 10px 0 5px; font-size: 14px; }
   .two-column { grid-template-columns: 1fr; }
   .flow-grid { grid-template-columns: 1fr; }
   .flow-canvas { border-right: 0; border-bottom: 1px solid #2a303c; }
+  .agent-console { grid-template-columns: 1fr; }
+  .agent-run-button { width: 100%; }
+  .agent-approval-card { align-items: stretch; flex-direction: column; }
   .timeline li { grid-template-columns: 1fr; gap: 3px; }
 }
 @media (max-width: 560px) {

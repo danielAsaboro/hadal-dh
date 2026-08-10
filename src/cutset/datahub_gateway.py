@@ -560,7 +560,7 @@ class DataHubGateway:
             raise DataHubWriteBackError("document search results are incomplete")
         expected_titles = {
             f"ChangeMarshal impact {analysis_key}",
-            f"Cutset impact {analysis_key}",
+            f"ChangeMarshal impact {analysis_key}",
         }
         urns = {
             entity["urn"]

@@ -27,6 +27,7 @@ export interface ServerDependencies {
   readonly github: () => WorkSurface & StatusSurface;
   readonly repoRoot?: string;
   readonly agent?: AgentRunApplication;
+  readonly agentScope?: Readonly<{ repository: string; baseRef: string; headRef: string }>;
 }
 
 export interface AgentRunApplication {
@@ -57,6 +58,27 @@ const runParams = z.object({ runId: z.string().min(1).max(200) }).strict();
 const approvalParams = runParams.extend({ token: z.string().min(1).max(300) }).strict();
 const approvalBody = z.object({ approved: z.boolean(), reason: z.string().trim().min(1).max(500).optional() }).strict();
 
+async function verifyAgentCaseScope(dependencies: ServerDependencies, value: ChangeCase): Promise<string> {
+  if (dependencies.repoRoot === undefined || dependencies.agentScope === undefined) {
+    throw new Error("QVAC agent repository scope is not configured");
+  }
+  if (value.repository !== dependencies.agentScope.repository) {
+    throw new Error("governed case repository does not match the QVAC agent scope");
+  }
+  const [baseSha, headSha, currentHeadSha] = await Promise.all([
+    resolveRevision(dependencies.repoRoot, dependencies.agentScope.baseRef),
+    resolveRevision(dependencies.repoRoot, dependencies.agentScope.headRef),
+    resolveRevision(dependencies.repoRoot, "HEAD"),
+  ]);
+  if (value.revision.baseSha !== baseSha || value.revision.headSha !== headSha) {
+    throw new Error("governed case revision does not match the QVAC agent scope");
+  }
+  if (currentHeadSha !== headSha) {
+    throw new Error("repository HEAD changed after the governed QVAC scope was configured");
+  }
+  return currentHeadSha;
+}
+
 export function createServer(dependencies: ServerDependencies): FastifyInstance {
   const server = Fastify({ logger: false, bodyLimit: 1_000_000 });
   server.setErrorHandler((error, _request, reply) => {
@@ -74,8 +96,9 @@ export function createServer(dependencies: ServerDependencies): FastifyInstance 
     if (dependencies.agent === undefined) return await reply.status(503).send({ message: "QVAC agent runtime is not configured" });
     const body = startRunBody.parse(request.body);
     const value = await dependencies.application.show(body.caseKey);
+    const currentHeadSha = await verifyAgentCaseScope(dependencies, value);
     return await reply.status(202).send(await dependencies.agent.start({
-      caseKey: value.caseKey, headSha: value.revision.headSha, prompt: body.prompt,
+      caseKey: value.caseKey, headSha: currentHeadSha, prompt: body.prompt,
     }));
   });
   server.get("/api/agent/runs/:runId", async (request, reply) => {
@@ -95,8 +118,9 @@ export function createServer(dependencies: ServerDependencies): FastifyInstance 
     const { runId, token } = approvalParams.parse(request.params);
     const body = approvalBody.parse(request.body);
     const value = await dependencies.application.show((await dependencies.agent.show(runId)).caseKey);
+    const currentHeadSha = await verifyAgentCaseScope(dependencies, value);
     return await dependencies.agent.resolveApproval({
-      runId, token, currentHeadSha: value.revision.headSha, approved: body.approved,
+      runId, token, currentHeadSha, approved: body.approved,
       ...(body.reason === undefined ? {} : { reason: body.reason }),
     });
   });

@@ -35,6 +35,7 @@ export const AgentRunSnapshotSchema = z.object({
   modelId: z.string().min(1),
   status: AgentRunStatusSchema,
   events: z.array(AgentRunEventSchema),
+  answer: z.string().min(1).max(20_000).optional(),
   pendingApproval: PendingAgentApprovalSchema.optional(),
 }).strict();
 

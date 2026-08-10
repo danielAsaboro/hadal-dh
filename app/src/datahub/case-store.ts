@@ -170,15 +170,20 @@ export class DataHubCaseStore {
       topics: ["changemarshal", "governed-change", value.state],
       related_assets: relatedAssets,
     };
-    if (existingUrn !== undefined) input.urn = existingUrn;
+    // DataHub's document search index is eventually consistent. A stable, case-key-derived
+    // identity prevents an immediate rerun (or another process) from creating a duplicate
+    // before the canonical title becomes searchable. Existing random/legacy URNs discovered
+    // above remain authoritative and are updated in place.
+    const intendedUrn = existingUrn ?? `urn:li:document:changemarshal-change-case-${value.caseKey}`;
+    input.urn = intendedUrn;
     const response = record(await this.tools.callTool("save_document", input), "save_document response");
     if (response.success !== true) throw new DataHubCaseStoreError("save_document did not succeed");
     const savedUrn = urn(response.urn, "saved document");
     if (!savedUrn.startsWith("urn:li:document:")) {
       throw new DataHubCaseStoreError("save_document returned a non-document URN");
     }
-    if (existingUrn !== undefined && savedUrn !== existingUrn) {
-      throw new DataHubCaseStoreError("save_document changed the existing document URN");
+    if (savedUrn !== intendedUrn) {
+      throw new DataHubCaseStoreError("save_document changed the intended document URN");
     }
     return savedUrn;
   }

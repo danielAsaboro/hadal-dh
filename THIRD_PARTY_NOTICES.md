@@ -30,3 +30,19 @@ The starter was provided under the MIT License:
 > LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 > OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 > SOFTWARE.
+
+## Runtime libraries
+
+ChangeMarshal installs these libraries from their published packages; it does
+not vendor their source or model weights in this repository. Their package
+licenses and notices remain present after `npm ci`.
+
+- Vercel AI SDK 7 (`ai`), Apache-2.0 — https://github.com/vercel/ai
+- QVAC AI SDK provider and CLI (`@qvac/ai-sdk-provider`, `@qvac/cli`),
+  Apache-2.0 — https://github.com/tetherto/qvac
+- React Flow (`@xyflow/react`), MIT — https://github.com/xyflow/xyflow
+- Model Context Protocol TypeScript SDK (`@modelcontextprotocol/sdk`), MIT —
+  https://github.com/modelcontextprotocol/typescript-sdk
+
+The QVAC model artifact is downloaded at runtime from the exact registry source
+declared by the installed provider and is not distributed with ChangeMarshal.

@@ -1,4 +1,5 @@
 import type { DataHubMcpConfig } from "./datahub/mcp-client";
+import type { AgentScope } from "./ai/orchestrator";
 
 type Environment = Readonly<Record<string, string | undefined>>;
 
@@ -122,8 +123,8 @@ function integerEnv(value: string | undefined, fallback: number, label: string, 
 export function qvacConfigFromEnv(env: Environment = process.env): QvacRuntimeConfig {
   const mode = productEnv(env, "QVAC_MODE") ?? "managed";
   if (mode !== "managed" && mode !== "external") throw new ConfigError("CHANGEMARSHAL_QVAC_MODE must be managed or external");
-  const model = productEnv(env, "QVAC_MODEL") ?? "qwen3.6-27b";
-  const contextSize = integerEnv(productEnv(env, "QVAC_CONTEXT_SIZE"), 32768, "CHANGEMARSHAL_QVAC_CONTEXT_SIZE", 1024);
+  const model = productEnv(env, "QVAC_MODEL") ?? "qwen3.5-4b";
+  const contextSize = integerEnv(productEnv(env, "QVAC_CONTEXT_SIZE"), 4096, "CHANGEMARSHAL_QVAC_CONTEXT_SIZE", 1024);
   const reasoningBudget = integerEnv(productEnv(env, "QVAC_REASONING_BUDGET"), 0, "CHANGEMARSHAL_QVAC_REASONING_BUDGET", -1);
   if (mode === "managed") return { mode, model, contextSize, reasoningBudget };
   const baseUrl = productEnv(env, "QVAC_BASE_URL");
@@ -135,6 +136,49 @@ export function qvacConfigFromEnv(env: Environment = process.env): QvacRuntimeCo
     model,
     contextSize,
     reasoningBudget,
+  };
+}
+
+function ownerMappings(value: string | undefined): readonly (readonly [string, string])[] {
+  if (value === undefined) return [];
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (!Array.isArray(parsed) || !parsed.every((item) => Array.isArray(item) && item.length === 2
+      && typeof item[0] === "string" && item[0].startsWith("urn:li:")
+      && typeof item[1] === "string" && /^[A-Za-z0-9-]+$/.test(item[1]))) {
+      throw new Error("not an array of DataHub URN and GitHub login pairs");
+    }
+    return parsed as readonly (readonly [string, string])[];
+  } catch (error) {
+    throw new ConfigError("CHANGEMARSHAL_AGENT_OWNER_MAPPINGS_JSON must be a JSON array of [DataHub URN, GitHub login] pairs", { cause: error });
+  }
+}
+
+export function agentScopeFromEnv(repoRoot: string, env: Environment = process.env): AgentScope {
+  const repository = productEnv(env, "AGENT_REPOSITORY") ?? productEnv(env, "GITHUB_REPOSITORY");
+  const baseRef = productEnv(env, "AGENT_BASE_REF");
+  const headRef = productEnv(env, "AGENT_HEAD_REF");
+  const targetUrl = productEnv(env, "AGENT_TARGET_URL");
+  if (!repository || !/^[^/\s]+\/[^/\s]+$/.test(repository)) {
+    throw new ConfigError("CHANGEMARSHAL_AGENT_REPOSITORY must be an explicit owner/name identity");
+  }
+  if (!baseRef || !headRef) throw new ConfigError("CHANGEMARSHAL_AGENT_BASE_REF and CHANGEMARSHAL_AGENT_HEAD_REF are required");
+  if (!targetUrl) throw new ConfigError("CHANGEMARSHAL_AGENT_TARGET_URL is required");
+  try {
+    new URL(targetUrl);
+  } catch (error) {
+    throw new ConfigError("CHANGEMARSHAL_AGENT_TARGET_URL must be a valid URL", { cause: error });
+  }
+  return {
+    repoRoot,
+    repository,
+    baseRef,
+    headRef,
+    targetUrl,
+    maxHops: integerEnv(productEnv(env, "AGENT_MAX_HOPS"), 3, "CHANGEMARSHAL_AGENT_MAX_HOPS", 1),
+    ownerMappings: ownerMappings(productEnv(env, "AGENT_OWNER_MAPPINGS_JSON")),
+    validationCommand: jsonStringArray(productEnv(env, "AGENT_VALIDATION_COMMAND_JSON"), "CHANGEMARSHAL_AGENT_VALIDATION_COMMAND_JSON"),
+    artifactPaths: jsonStringArray(productEnv(env, "AGENT_ARTIFACT_PATHS_JSON"), "CHANGEMARSHAL_AGENT_ARTIFACT_PATHS_JSON"),
   };
 }
 

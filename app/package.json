@@ -9,6 +9,7 @@
     "dev": "vite",
     "demo": "tsx scripts/governed-demo.ts",
     "serve": "tsx src/server/index.ts",
+    "smoke:qvac": "tsx scripts/qvac-smoke.mts",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit"

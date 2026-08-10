@@ -39,6 +39,7 @@ describe("canonical case execution graph", () => {
     expect(flow.nodes.map(({ position }) => position.x)).toEqual([...flow.nodes.map(({ position }) => position.x)].sort((a, b) => a - b));
     expect(flow.edges).toHaveLength(8);
     expect(flow.edges.every(({ source, target }) => source !== target)).toBe(true);
+    expect(flow.nodes.every(({ draggable }) => draggable === true)).toBe(true);
   });
 
   it("derives blocked and waiting states only from canonical case evidence", () => {

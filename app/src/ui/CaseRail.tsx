@@ -13,6 +13,7 @@ export function CaseRail({ cases, current, disabled, onSelect }: Readonly<{
       <nav aria-label="Governed case navigation">
         {cases.map((item) => (
           <button
+            aria-pressed={item.caseKey === current.caseKey}
             className={item.caseKey === current.caseKey ? "case-link active" : "case-link"}
             disabled={disabled}
             key={item.caseKey}

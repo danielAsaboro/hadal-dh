@@ -381,7 +381,9 @@ describe("ChangeMarshal coordination workspace", () => {
     const actions = within(workspace).getByRole("region", { name: /case actions/i });
     const sync = within(actions).getByRole("button", { name: /sync owner work/i });
     expect(sync.tabIndex).toBe(0);
-    const actionStatus = within(actions).getByRole("status", { name: /case action status/i });
+    const actionStatus = screen.getByRole("status", { name: /case action status/i });
+    expect(actions.contains(actionStatus)).toBe(false);
+    expect(workspace.contains(actionStatus)).toBe(true);
     expect(actionStatus.getAttribute("aria-live")).toBe("polite");
     expect(actionStatus.textContent).toMatch(/case actions ready/i);
 
@@ -390,6 +392,31 @@ describe("ChangeMarshal coordination workspace", () => {
     expect(actionStatus.textContent).toMatch(/syncing owner work/i);
     finishSync?.(value);
     await waitFor(() => expect(actions.getAttribute("aria-busy")).toBe("false"));
+  });
+
+  it("exposes the current governed case through button state", async () => {
+    const customers = caseValue();
+    const campaigns = caseValue({
+      repository: "acme/marketing",
+      modelName: "campaigns",
+      consumerName: "attribution",
+      headSha: "campaign-head",
+    });
+    const client = clientFor(customers, {
+      listCases: async () => [customers, campaigns],
+      getCase: async (caseKey) => caseKey === customers.caseKey ? customers : campaigns,
+    });
+    render(<App client={client} sessionClient={localSessionClient} initialPath="/workspace" />);
+
+    const customerButton = await screen.findByRole("button", { name: /customers/i });
+    const campaignButton = screen.getByRole("button", { name: /campaigns/i });
+    expect(customerButton.getAttribute("aria-pressed")).toBe("true");
+    expect(campaignButton.getAttribute("aria-pressed")).toBe("false");
+
+    fireEvent.click(campaignButton);
+    await screen.findByRole("heading", { name: /campaigns governed change/i });
+    expect(customerButton.getAttribute("aria-pressed")).toBe("false");
+    expect(campaignButton.getAttribute("aria-pressed")).toBe("true");
   });
 
   it.each([
@@ -598,7 +625,9 @@ describe("ChangeMarshal coordination workspace", () => {
     };
     render(<App client={client} sessionClient={localSessionClient} initialPath="/workspace" />);
 
-    const empty = await screen.findByRole("status", { name: /governed case empty state/i });
+    const main = await screen.findByRole("main");
+    const empty = within(main).getByRole("status", { name: /governed case empty state/i });
+    expect(main.children).toHaveLength(1);
     expect(empty.textContent).toMatch(/No governed ChangeMarshal cases exist in DataHub/i);
     expect(empty.textContent).toMatch(/A canonical DataHub change case is required before work can begin/i);
   });

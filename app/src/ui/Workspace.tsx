@@ -186,9 +186,11 @@ export function Workspace({ client = httpWorkspaceClient }: { readonly client?: 
   }
   if (current === undefined) {
     return (
-      <main className="center-state" role="status" aria-label="Governed case empty state">
-        <p>No governed ChangeMarshal cases exist in DataHub.</p>
-        <p>A canonical DataHub change case is required before work can begin.</p>
+      <main className="center-state">
+        <div role="status" aria-label="Governed case empty state">
+          <p>No governed ChangeMarshal cases exist in DataHub.</p>
+          <p>A canonical DataHub change case is required before work can begin.</p>
+        </div>
       </main>
     );
   }
@@ -226,8 +228,8 @@ export function Workspace({ client = httpWorkspaceClient }: { readonly client?: 
 
         {error && <div className="error-banner" role="alert"><strong>Not verified.</strong> {error}</div>}
 
+        <span className="sr-only" role="status" aria-label="Case action status" aria-live="polite">{actionStatus}</span>
         <section className="command-bar" aria-label="Case actions" aria-busy={busy !== undefined}>
-          <span className="sr-only" role="status" aria-label="Case action status" aria-live="polite">{actionStatus}</span>
           <button disabled={busy !== undefined} onClick={() => void mutate("sync", () => client.sync(current.caseKey))}>{busy === "sync" ? "Syncing owner work…" : "Sync owner work"}</button>
           <button disabled={busy !== undefined} onClick={() => void mutate("reconcile", () => client.reconcile(current.caseKey))}>{busy === "reconcile" ? "Reconciling GitHub…" : "Reconcile GitHub"}</button>
           <button className="primary-action" disabled={busy !== undefined} onClick={() => void mutate("decide", () => client.decide(current.caseKey, window.location.href))}>

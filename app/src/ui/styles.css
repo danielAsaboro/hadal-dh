@@ -38,7 +38,6 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 a { color: inherit; }
 code, .sha, dd { font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; overflow-wrap: anywhere; word-break: break-word; }
 ::selection { color: var(--ink); background: var(--lime); }
-:focus-visible { outline: 3px solid var(--lime-dark); outline-offset: 3px; }
 
 .sr-only {
   position: absolute;
@@ -366,7 +365,7 @@ code, .sha, dd { font-family: "SFMono-Regular", Consolas, "Liberation Mono", mon
   text-align: left;
 }
 .case-link span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 720; }
-.case-link small { flex: 0 0 auto; color: #71786e; font-family: "SFMono-Regular", Consolas, monospace; font-size: 9px; }
+.case-link small { flex: 0 0 auto; color: #b8c0b4; font-family: "SFMono-Regular", Consolas, monospace; font-size: 10px; font-weight: 750; letter-spacing: .025em; }
 .case-link:hover { border-color: var(--line-dark); color: var(--chalk); }
 .case-link.active { border-color: var(--lime); background: var(--ink-soft); color: var(--chalk); box-shadow: inset 4px 0 var(--lime); }
 .case-link.active small { color: var(--lime); }
@@ -610,9 +609,9 @@ code, .sha, dd { font-family: "SFMono-Regular", Consolas, "Liberation Mono", mon
 .flow-canvas .react-flow__pane:active { cursor: grabbing; }
 .flow-canvas .react-flow__edge-path { stroke: #758074; stroke-width: 1.7; }
 .flow-canvas .react-flow__edge.animated path { stroke: var(--lime); }
-.flow-canvas .react-flow__attribution { background: #11130f; color: #7d867a; }
-.flow-canvas .react-flow__attribution a { color: #aab2a6; }
-.flow-canvas .react-flow__controls { overflow: hidden; border: 1px solid #596157; border-radius: 10px; box-shadow: none; }
+.flow-canvas .react-flow__attribution { display: flex; min-height: 44px; align-items: center; background: #11130f; color: #7d867a; }
+.flow-canvas .react-flow__attribution a { display: inline-flex; min-width: 44px; min-height: 44px; align-items: center; justify-content: center; padding: 0 8px; color: #aab2a6; }
+.flow-canvas .react-flow__controls { overflow: visible; border: 1px solid #596157; border-radius: 10px; box-shadow: none; }
 .flow-canvas .react-flow__controls-button {
   width: 44px;
   height: 44px;
@@ -757,7 +756,7 @@ code, .sha, dd { font-family: "SFMono-Regular", Consolas, "Liberation Mono", mon
   .case-rail { position: static; height: auto; padding: 16px; }
   .case-rail .brand-lockup { padding: 0; }
   .case-rail .rail-label { margin: 22px 0 8px; }
-  .case-rail nav { display: flex; overflow-x: auto; padding-bottom: 5px; }
+  .case-rail nav { display: flex; overflow-x: auto; margin: -10px; padding: 10px; scroll-padding-inline: 10px; }
   .case-link { min-width: 180px; }
   .rail-foot { margin-top: 12px; padding: 0; }
   .case-main { padding: 30px 20px 58px; }
@@ -797,7 +796,7 @@ code, .sha, dd { font-family: "SFMono-Regular", Consolas, "Liberation Mono", mon
 
   .case-header { flex-direction: column; }
   .header-state { justify-content: flex-start; }
-  .case-sections { overflow-x: auto; flex-wrap: nowrap; border-radius: 15px; }
+  .case-sections { overflow-x: auto; flex-wrap: nowrap; padding: 10px; border-radius: 15px; scroll-padding-inline: 10px; }
   .case-sections a { flex: 0 0 auto; }
   .command-bar { flex-wrap: wrap; }
   .command-bar button { flex: 1 1 160px; }
@@ -840,4 +839,12 @@ code, .sha, dd { font-family: "SFMono-Regular", Consolas, "Liberation Mono", mon
     scroll-behavior: auto !important;
     transition-duration: .01ms !important;
   }
+}
+
+:focus-visible {
+  position: relative;
+  z-index: 5;
+  outline: 3px solid #ffffff;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 8px #11130f !important;
 }

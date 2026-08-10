@@ -182,6 +182,26 @@ def test_updates_only_the_exact_analysis_document() -> None:
     assert gateway.tools["save_document"].calls[0]["urn"] == "urn:li:document:existing"
 
 
+def test_migrates_the_exact_legacy_cutset_analysis_document_in_place() -> None:
+    gateway = _gateway()
+    gateway.tools["search_documents"].response = {
+        "searchResults": [
+            {
+                "entity": {
+                    "urn": "urn:li:document:legacy-cutset",
+                    "info": {"title": "Cutset impact abc123"},
+                }
+            }
+        ],
+        "total": 1,
+    }
+
+    result = gateway.write_back(_report())
+
+    assert result.updated_existing_document is True
+    assert gateway.tools["save_document"].calls[0]["urn"] == "urn:li:document:legacy-cutset"
+
+
 def test_gateway_rejects_incomplete_evidence_before_any_mutation() -> None:
     gateway = _gateway()
     report = _report()

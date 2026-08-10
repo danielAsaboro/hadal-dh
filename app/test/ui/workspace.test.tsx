@@ -13,7 +13,16 @@ class TestResizeObserver implements ResizeObserver {
   readonly disconnect = () => undefined;
 }
 globalThis.ResizeObserver = TestResizeObserver;
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  window.history.replaceState({}, "", "/");
+});
+
+const localSessionClient = {
+  read: async () => ({ configured: false, authenticated: true }),
+  signIn: async (_passphrase: string) => undefined,
+  signOut: async () => undefined,
+};
 
 function caseValue(): ChangeCase {
   const source = "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.customers,PROD)";
@@ -45,6 +54,142 @@ function caseValue(): ChangeCase {
 }
 
 describe("ChangeMarshal coordination workspace", () => {
+  it("renders the public landing page without reading governed cases", () => {
+    const value = caseValue();
+    const listCases = vi.fn(async () => [value]);
+    const client: WorkspaceClient = {
+      listCases, getCase: async () => value, sync: async () => value,
+      reconcile: async () => value, decide: async () => value,
+      agentHealth: async () => ({ available: true, provider: "qvac", modelId: "qwen3.6-27b", managed: true }),
+      startAgent: async () => { throw new Error("not used"); },
+      approveAgent: async () => { throw new Error("not used"); },
+    };
+
+    render(<App client={client} sessionClient={localSessionClient} initialPath="/" />);
+
+    expect(screen.getByRole("heading", { name: /turn graph evidence into coordinated, accountable, validated work/i })).not.toBeNull();
+    expect(screen.getByText(/DataHub is the canonical institutional memory/i)).not.toBeNull();
+    expect(screen.getByText("Graph evidence")).not.toBeNull();
+    expect(screen.getByText("Accountable execution")).not.toBeNull();
+    expect(screen.getByText("Governed approval")).not.toBeNull();
+    expect(screen.getByText("Durable resolution")).not.toBeNull();
+    expect(listCases).not.toHaveBeenCalled();
+  });
+
+  it("enters the workspace through History API navigation", async () => {
+    const value = caseValue();
+    const listCases = vi.fn(async () => [value]);
+    const read = vi.fn(async () => ({ configured: false, authenticated: true }));
+    const client: WorkspaceClient = {
+      listCases, getCase: async () => value, sync: async () => value,
+      reconcile: async () => value, decide: async () => value,
+      agentHealth: async () => ({ available: true, provider: "qvac", modelId: "qwen3.6-27b", managed: true }),
+      startAgent: async () => { throw new Error("not used"); },
+      approveAgent: async () => { throw new Error("not used"); },
+    };
+
+    render(<App client={client} sessionClient={{ ...localSessionClient, read }} initialPath="/" />);
+    expect(listCases).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("link", { name: /enter governed workspace/i }));
+
+    await waitFor(() => expect(read).toHaveBeenCalledTimes(1));
+    await screen.findByRole("heading", { name: /customers governed change/i });
+    expect(window.location.pathname).toBe("/workspace");
+    expect(listCases).toHaveBeenCalledTimes(1);
+  });
+
+  it("responds to browser history navigation", async () => {
+    const value = caseValue();
+    const listCases = vi.fn(async () => [value]);
+    const read = vi.fn(async () => ({ configured: false, authenticated: true }));
+    const client: WorkspaceClient = {
+      listCases, getCase: async () => value, sync: async () => value,
+      reconcile: async () => value, decide: async () => value,
+      agentHealth: async () => ({ available: true, provider: "qvac", modelId: "qwen3.6-27b", managed: true }),
+      startAgent: async () => { throw new Error("not used"); },
+      approveAgent: async () => { throw new Error("not used"); },
+    };
+
+    render(<App client={client} sessionClient={{ ...localSessionClient, read }} initialPath="/" />);
+    window.history.pushState({}, "", "/workspace");
+    fireEvent(window, new PopStateEvent("popstate"));
+
+    await waitFor(() => expect(read).toHaveBeenCalledTimes(1));
+    await screen.findByRole("heading", { name: /customers governed change/i });
+    expect(listCases).toHaveBeenCalledTimes(1);
+  });
+
+  it("gates configured unauthenticated workspaces with an accessible password form", async () => {
+    const value = caseValue();
+    const listCases = vi.fn(async () => [value]);
+    const client: WorkspaceClient = {
+      listCases, getCase: async () => value, sync: async () => value,
+      reconcile: async () => value, decide: async () => value,
+      agentHealth: async () => ({ available: true, provider: "qvac", modelId: "qwen3.6-27b", managed: true }),
+      startAgent: async () => { throw new Error("not used"); },
+      approveAgent: async () => { throw new Error("not used"); },
+    };
+    const sessionClient = { ...localSessionClient, read: async () => ({ configured: true, authenticated: false }) };
+
+    render(<App client={client} sessionClient={sessionClient} initialPath="/workspace" />);
+
+    expect(await screen.findByRole("heading", { name: /operator sign-in/i })).not.toBeNull();
+    const passphrase = screen.getByLabelText(/operator passphrase/i);
+    expect(passphrase.getAttribute("type")).toBe("password");
+    expect(screen.getByRole("button", { name: /sign in to workspace/i })).not.toBeNull();
+    expect(listCases).not.toHaveBeenCalled();
+  });
+
+  it("keeps invalid credentials visibly failed without loading cases", async () => {
+    const value = caseValue();
+    const listCases = vi.fn(async () => [value]);
+    const client: WorkspaceClient = {
+      listCases, getCase: async () => value, sync: async () => value,
+      reconcile: async () => value, decide: async () => value,
+      agentHealth: async () => ({ available: true, provider: "qvac", modelId: "qwen3.6-27b", managed: true }),
+      startAgent: async () => { throw new Error("not used"); },
+      approveAgent: async () => { throw new Error("not used"); },
+    };
+    const sessionClient = {
+      ...localSessionClient,
+      read: async () => ({ configured: true, authenticated: false }),
+      signIn: async () => { throw new Error("Unauthorized"); },
+    };
+
+    render(<App client={client} sessionClient={sessionClient} initialPath="/workspace" />);
+    fireEvent.change(await screen.findByLabelText(/operator passphrase/i), { target: { value: "wrong" } });
+    fireEvent.click(screen.getByRole("button", { name: /sign in to workspace/i }));
+
+    expect((await screen.findByRole("alert")).textContent).toMatch(/sign-in failed.*unauthorized/i);
+    expect(listCases).not.toHaveBeenCalled();
+  });
+
+  it("reveals real workspace loading only after a verified session succeeds", async () => {
+    const value = caseValue();
+    const listCases = vi.fn(async () => await new Promise<readonly ChangeCase[]>(() => undefined));
+    const client: WorkspaceClient = {
+      listCases, getCase: async () => value, sync: async () => value,
+      reconcile: async () => value, decide: async () => value,
+      agentHealth: async () => ({ available: true, provider: "qvac", modelId: "qwen3.6-27b", managed: true }),
+      startAgent: async () => { throw new Error("not used"); },
+      approveAgent: async () => { throw new Error("not used"); },
+    };
+    const read = vi.fn()
+      .mockResolvedValueOnce({ configured: true, authenticated: false })
+      .mockResolvedValueOnce({ configured: true, authenticated: true });
+    const signIn = vi.fn(async () => undefined);
+
+    render(<App client={client} sessionClient={{ ...localSessionClient, read, signIn }} initialPath="/workspace" />);
+    fireEvent.change(await screen.findByLabelText(/operator passphrase/i), { target: { value: "operator-passphrase" } });
+    fireEvent.click(screen.getByRole("button", { name: /sign in to workspace/i }));
+
+    expect(await screen.findByText("Loading governed cases…")).not.toBeNull();
+    expect(signIn).toHaveBeenCalledWith("operator-passphrase");
+    expect(read).toHaveBeenCalledTimes(2);
+    expect(listCases).toHaveBeenCalledTimes(1);
+  });
+
   it("renders token-free durable agent audit events from a reread DataHub case", async () => {
     const value = caseValue();
     const audited: ChangeCase = {
@@ -69,7 +214,7 @@ describe("ChangeMarshal coordination workspace", () => {
       approveAgent: async () => { throw new Error("not used"); },
     };
 
-    render(<App client={client} />);
+    render(<App client={client} sessionClient={localSessionClient} initialPath="/workspace" />);
 
     const audit = await screen.findByRole("list", { name: /durable agent audit/i });
     expect(audit.textContent).toContain("qwen3.6-27b");
@@ -90,9 +235,9 @@ describe("ChangeMarshal coordination workspace", () => {
       startAgent: async () => { throw new Error("not used"); },
       approveAgent: async () => { throw new Error("not used"); },
     };
-    render(<App client={client} />);
+    render(<App client={client} sessionClient={localSessionClient} initialPath="/workspace" />);
 
-    expect(screen.getByText("Loading governed cases…")).not.toBeNull();
+    expect(screen.getByText("Verifying operator session…")).not.toBeNull();
     await waitFor(() => expect(screen.getByRole("heading", { name: /customers/i })).not.toBeNull());
     expect(screen.getByRole("region", { name: /governed execution graph/i })).not.toBeNull();
     expect(screen.getByText("Git change")).not.toBeNull();
@@ -128,7 +273,7 @@ describe("ChangeMarshal coordination workspace", () => {
       startAgent,
       approveAgent,
     };
-    render(<App client={client} />);
+    render(<App client={client} sessionClient={localSessionClient} initialPath="/workspace" />);
 
     const run = await screen.findByRole("button", { name: /Run QVAC coordinator/i });
     fireEvent.click(run);

@@ -7,4 +7,6 @@ import "./styles.css";
 
 const root = document.getElementById("root");
 if (root === null) throw new Error("ChangeMarshal root element is missing");
-createRoot(root).render(<StrictMode><App /></StrictMode>);
+createRoot(root).render(
+  <StrictMode><App initialPath={window.location.pathname} /></StrictMode>,
+);

@@ -33,6 +33,58 @@ GitHub synchronization is implemented against the real REST API and contract-tes
 - DataHub assertions are consumed when the connected MCP server exposes them. The official v0.6.0 server marks that tool Cloud-only; OSS capability absence is recorded rather than invented.
 - Query literals are redacted before evidence enters the case.
 
+## Verified DataHub resource coverage
+
+The resource pass below was run against DataHub Core `v1.6.0`
+(`059a36c0b035a6057de00114ccac0ea9003d6bc2`), not inferred from installed
+packages. Raw tokens, runtime databases, and unsanitized logs remain in the
+private submission workspace. The judge-readable official-dataset result is in
+[`examples/official-datahub-scenario/`](examples/official-datahub-scenario/).
+
+| Resource | Exact version | Real use and evidence | Status / limitation |
+| --- | --- | --- | --- |
+| DataHub Docs | Docs `1.6.0` | Supplied the primary-source procedures used for every command below. | **Verified guidance**; documentation alone is not runtime proof. |
+| Quickstart | Core image `v1.6.0` | Backed the live OSS instance; `/config` and entity counts were reread. | **Verified** on the existing documented stack. |
+| DataHub Core | `v1.6.0`, `059a36c0…` | Canonical graph for rename evidence, official datasets, lineage, governance, queries, and durable Documents. | **Verified**; Cloud-only capabilities remain unavailable. |
+| DataHub MCP Server | `0.6.0` | Primary TypeScript lane read schema, owner, governance, query and multi-hop/ML context, then idempotently saved and reread one stable NYC analysis URN. | **Verified**; OSS advertised Documents but not dataset assertions. |
+| Agent Context Kit | `1.6.0.17` | Python fallback read the official NYC schema, owner, governance and exact lineage, then updated and reread an isolated Document. | **Verified compatibility lane**; indexed search required bounded polling. |
+| DataHub Skills | `1.4.1`, `f22f930…` | The `datahub-lineage` skill validated uncapped three-hop primary and two-hop NYC paths during development. | **Verified development-time use**, not shipped runtime integration. |
+| Analytics Agent | `0.4.0`, `14efac0…` | A real read-only NYC run authenticated to DataHub and resolved the exact three URNs plus owner/tag/glossary context; it stalled before lineage, SQL, or synthesis. | **Blocked after partial live use**; the eight-minute run ended with a provider timeout, so no completed grounded answer is claimed. |
+| `showcase-ecommerce` | datapack index v4; static-assets `dd5434b…` | Loaded with the official command, reread real URNs, and exposed a real pagination edge that produced a public regression fix. | **Verified**; Core filtered 247 unsupported aspects. |
+| official built-in scenario | NYC path `edbfb6d…` | Loaded five real datasets plus official lineage/metadata; MCP and ACK reread the exact raw→staging→mart path. | **Verified**; the committed DB actually has a nine-day lag and no zero-load row, contrary to its README. |
+| DataHub Community | `#agent-hackathon` | A technically focused reproduction is prepared. | **Pending action-time confirmation**; no post is claimed yet. |
+| upstream contribution | static-assets base `dd5434b…` | A tested correction for the NYC scenario generator and exact PR text are prepared. | **Pending action-time confirmation**; no PR or maintainer response is claimed yet. |
+
+Reproduce the two official imports from their primary-source directories:
+
+```bash
+datahub datapack load showcase-ecommerce
+datahub ingest -c ingest_pipeline.yaml
+python add_lineage.py --instance=nyc_taxi_pipeline
+python add_metadata.py --instance=nyc_taxi_pipeline
+```
+
+The observed official NYC URNs, counts, dates, lineage, governance, MCP
+capability flags, and stable write-back URN are in the sanitized
+[`proof-summary.json`](examples/official-datahub-scenario/proof-summary.json).
+
+### Using DataHub Skills with ChangeMarshal
+
+DataHub Skills guide development and investigation; they are not a runtime
+dependency of ChangeMarshal. Install the pinned official package in a private
+agent workspace and invoke the lineage skill against a real URN:
+
+```bash
+npx skills add datahub-project/datahub-skills -a codex
+datahub -C skill=datahub-lineage lineage \
+  --urn "$SOURCE_URN" --direction downstream --hops 3 --count 100 --format json
+```
+
+Check both `capped` and the returned hop count before using the result. In the
+verified pass this changed the investigation artifact by confirming the full
+`customers → customer_features → train-churn → churn model` path and the
+official NYC raw→staging→mart path were uncapped.
+
 ## Install
 
 Requirements: Node.js 24, npm, Git, a real DataHub OSS/Core or Cloud instance, and the official DataHub MCP server.

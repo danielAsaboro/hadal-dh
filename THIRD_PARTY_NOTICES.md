@@ -56,7 +56,7 @@ packages, or repository source.
 - DataHub Core and CLI, Apache-2.0 — https://github.com/datahub-project/datahub
 - DataHub MCP Server, Apache-2.0 — https://github.com/acryldata/mcp-server-datahub
 - DataHub Skills, Apache-2.0 — https://github.com/datahub-project/datahub-skills
-- Analytics Agent, Apache-2.0 — https://github.com/acryldata/analytics-agent
+- Analytics Agent, Apache-2.0 — https://github.com/datahub-project/analytics-agent
 - NYC Taxi static-assets dataset, official source notes identify the underlying
   NYC Open Data records as public domain —
   https://github.com/datahub-project/static-assets/tree/main/datasets/nyc-taxi

@@ -1,6 +1,14 @@
 import { useState, type ReactNode } from "react";
 
 import type { ChangeCase } from "../domain/case";
+import {
+  indexOwnerMappings,
+  inspectApprovalRequirement,
+  inspectWorkProjection,
+  type ApprovalDecisionDefect,
+  type ProjectionDefect,
+} from "../domain/policy-evidence";
+import { BoundedAgentEvents } from "./BoundedAgentEvents";
 import { statusPresentation, type OperationalStatus } from "./StatusIndicator";
 
 const pageSize = 25;
@@ -18,6 +26,7 @@ const operationalState: Readonly<Record<string, OperationalStatus>> = {
   completed: "verified",
   resolved: "verified",
   verified: "verified",
+  unverified: "blocked",
   blocked: "blocked",
   blocked_context: "blocked",
   blocked_ownership: "blocked",
@@ -106,6 +115,31 @@ function BoundedEvidence({ values, render, label }: Readonly<{
   );
 }
 
+function projectionDefectText(
+  defect: ProjectionDefect,
+  state: ChangeCase["externalProjections"][number]["state"],
+  expectedAssignee: string | undefined,
+): string {
+  if (defect === "state") return `Projection state is ${state}; verified evidence is required.`;
+  if (defect === "revision") return "Projection revision does not match the current governed revision.";
+  if (defect === "head") return "Projection Git head does not match the current immutable Git head.";
+  if (defect === "verification_time") return "Projection has not been verified.";
+  return expectedAssignee === undefined
+    ? "Projection assignee cannot be verified because the expected GitHub actor is not mapped."
+    : `Projection assignee does not match expected GitHub actor ${expectedAssignee}.`;
+}
+
+function approvalDefectText(defect: ApprovalDecisionDefect, expectedActor: string | undefined): string {
+  if (defect === "revision") return "Decision revision does not match the current governed revision.";
+  if (defect === "head") return "Decision Git head does not match the current immutable Git head.";
+  if (defect === "role") return "Decision role does not match the required role.";
+  if (defect === "owner") return "Decision owner does not match the required owner URN.";
+  if (defect === "provenance") return "GitHub provenance is incomplete; both external ID and review URL are required.";
+  return expectedActor === undefined
+    ? "Decision actor cannot be verified because the expected GitHub actor is not mapped."
+    : `Decision actor does not match expected GitHub actor ${expectedActor}.`;
+}
+
 export function CaseOverview({ value, busy, actionStatus, onSync, onReconcile, onEvaluate }: Readonly<{
   value: ChangeCase;
   busy?: string;
@@ -115,6 +149,8 @@ export function CaseOverview({ value, busy, actionStatus, onSync, onReconcile, o
   onEvaluate: () => void;
 }>) {
   const blockers = value.admission?.blockers ?? ["ADMISSION_NOT_EVALUATED"];
+  const ownerMappings = indexOwnerMappings(value);
+  const verifiedWork = value.workItems.filter((work) => inspectWorkProjection(value, work, ownerMappings).verified).length;
   return (
     <div className="case-page case-overview-page">
       <span className="sr-only" role="status" aria-label="Case action status" aria-live="polite">{actionStatus}</span>
@@ -131,7 +167,7 @@ export function CaseOverview({ value, busy, actionStatus, onSync, onReconcile, o
         <div className="metric-grid" aria-label="Case summary">
           <article><span>Graph paths</span><strong>{value.evidence.paths.length}</strong></article>
           <article><span>Owners engaged</span><strong>{new Set(value.workItems.map((item) => item.ownerUrn)).size}</strong></article>
-          <article><span>Verified work</span><strong>{value.externalProjections.filter((item) => item.state === "verified").length}/{value.workItems.length}</strong></article>
+          <article><span>Verified work</span><strong>{verifiedWork}/{value.workItems.length}</strong></article>
           <article className={blockers.length ? "metric-alert" : "metric-clear"}><span>Merge blockers</span><strong>{blockers.length}</strong></article>
         </div>
       </section>
@@ -156,12 +192,13 @@ export function CaseOverview({ value, busy, actionStatus, onSync, onReconcile, o
 
 export function CaseWork({ value }: Readonly<{ value: ChangeCase }>) {
   const pagination = usePagination(value.workItems);
+  const ownerMappings = indexOwnerMappings(value);
   return (
     <section className="case-page panel case-work-page" aria-labelledby="case-work-title" aria-label="Owner work">
       <div className="section-heading"><div><p className="eyebrow">Accountable execution</p><h2 id="case-work-title">Owner work</h2></div><span className="count">{value.workItems.length}</span></div>
       {value.workItems.length === 0 ? <Empty>No work can be derived until graph evidence and ownership are complete.</Empty> : (
         <div className="work-stack">{pagination.rows.map((work) => {
-          const projections = value.externalProjections.filter((item) => item.workKey === work.workKey);
+          const projectionInspection = inspectWorkProjection(value, work, ownerMappings);
           const receipts = value.validationReceipts.filter((item) => item.workKey === work.workKey);
           return (
             <article className="work-card" key={work.workKey}>
@@ -181,21 +218,29 @@ export function CaseWork({ value }: Readonly<{ value: ChangeCase }>) {
                 </section>
                 <section aria-label={`GitHub projections for ${work.title}`}>
                   <h4>GitHub projection</h4>
-                  {projections.length === 0 ? <strong className="evidence-missing">GitHub projection missing</strong> : (
-                    <BoundedEvidence
-                      label="GitHub projections"
-                      values={projections.map((projection) => (
-                        <div className="evidence-record" key={`${projection.externalId}-${projection.url}`}>
-                          <StatePill value={projection.state} />
-                          <a href={projection.url} target="_blank" rel="noreferrer">Open GitHub issue ↗</a>
-                          <span>Assignee <code>{projection.assignee}</code></span>
-                          <span>Git head <code>{projection.headSha}</code></span>
-                          {projection.verifiedAt === null ? <strong>Projection has not been verified.</strong> : <time dateTime={projection.verifiedAt}>{projection.verifiedAt}</time>}
-                          {projection.state === "error" && <strong>Projection error remains unresolved.</strong>}
-                        </div>
-                      ))}
-                      render={(projection) => projection}
-                    />
+                  {projectionInspection.collection === "missing" ? <strong className="evidence-missing">GitHub projection missing</strong> : (
+                    <>
+                      {projectionInspection.collection === "conflict" && (
+                        <strong className="evidence-defect">Projection set is unverified: expected exactly one projection; found {projectionInspection.records.length}.</strong>
+                      )}
+                      <BoundedEvidence
+                        label="GitHub projections"
+                        values={projectionInspection.records.map((record) => {
+                          const projection = record.value;
+                          return (
+                            <div className="evidence-record" key={`${projection.externalId}-${projection.url}`}>
+                              <StatePill value={record.verified ? "verified" : "unverified"} />
+                              <a href={projection.url} target="_blank" rel="noreferrer">Open GitHub issue ↗</a>
+                              <span>Assignee <code>{projection.assignee}</code></span>
+                              <span>Git head <code>{projection.headSha}</code></span>
+                              {projection.verifiedAt !== null && <time dateTime={projection.verifiedAt}>{projection.verifiedAt}</time>}
+                              {record.defects.map((defect) => <strong className="evidence-defect" key={defect}>{projectionDefectText(defect, projection.state, projectionInspection.expectedAssignee)}</strong>)}
+                            </div>
+                          );
+                        })}
+                        render={(projection) => projection}
+                      />
+                    </>
                   )}
                 </section>
                 <section aria-label={`Validation receipts for ${work.title}`}>
@@ -229,46 +274,60 @@ export function CaseWork({ value }: Readonly<{ value: ChangeCase }>) {
 
 export function CaseApprovals({ value }: Readonly<{ value: ChangeCase }>) {
   const pagination = usePagination(value.approvalRequirements);
+  const ownerMappings = indexOwnerMappings(value);
   return (
     <section className="case-page panel case-approvals-page" aria-labelledby="case-approvals-title">
       <div className="section-heading"><div><p className="eyebrow">Human authority · immutable scope</p><h2 id="case-approvals-title">SHA-bound human approvals</h2></div><span className="count">{value.approvalRequirements.length}</span></div>
       {value.approvalRequirements.length === 0 ? <Empty>No human approval requirements exist for the current governed revision.</Empty> : (
         <div className="approval-stack">{pagination.rows.map((requirement) => {
-          const decisions = value.approvalDecisions.filter((item) => item.requirementKey === requirement.requirementKey);
-          const currentDecisions = decisions.filter((item) => item.headSha === value.revision.headSha);
-          const staleDecisions = decisions.filter((item) => item.headSha !== value.revision.headSha);
-          const decisionRecords: ReactNode[] = [
-            ...currentDecisions.map((decision) => (
-              <div className="recorded-decision" key={`${decision.actorLogin}-${decision.decidedAt}-${decision.externalId ?? "decision"}`}>
-                <StatePill value={decision.verdict} />
+          const inspection = inspectApprovalRequirement(value, requirement, ownerMappings);
+          const decisionRecords: ReactNode[] = inspection.records.map((record) => {
+            const decision = record.value;
+            const stale = record.defects.includes("head");
+            return (
+              <div className={`recorded-decision${stale ? " stale-decision" : record.verified ? "" : " unverified-decision"}`} key={`${decision.actorLogin}-${decision.decidedAt}-${decision.externalId ?? "decision"}`}>
+                <StatePill value={record.verified ? decision.verdict : stale ? "stale" : "unverified"} />
                 <strong>{decision.actorLogin}</strong>
-                <span>Verified from GitHub for <code>{decision.headSha}</code></span>
+                <span>Verdict {decision.verdict}</span>
+                {record.verified
+                  ? <span>Verified from GitHub for <code>{decision.headSha}</code></span>
+                  : stale
+                    ? <span>Stored GitHub decision for <code>{decision.headSha}</code>; not valid for the current head.</span>
+                    : <span>Decision is not verified for the current governed requirement.</span>}
                 <time dateTime={decision.decidedAt}>{decision.decidedAt}</time>
                 {decision.url !== undefined && <a href={decision.url} target="_blank" rel="noreferrer">Open GitHub review ↗</a>}
+                {record.defects.map((defect) => <strong className="evidence-defect" key={defect}>{approvalDefectText(defect, inspection.expectedActor)}</strong>)}
               </div>
-            )),
-            ...staleDecisions.map((decision) => (
-              <div className="recorded-decision stale-decision" key={`stale-${decision.actorLogin}-${decision.decidedAt}`}>
-                <StatePill value="stale" />
-                <strong>{decision.actorLogin}</strong>
-                <span>Stored GitHub decision for <code>{decision.headSha}</code>; not valid for the current head.</span>
-              </div>
-            )),
-          ];
+            );
+          });
           return (
             <article className="approval-row" key={requirement.requirementKey}>
               <div>
                 <StatePill value={requirement.role} />
                 <h3>{shortUrn(requirement.ownerUrn)}</h3>
                 <p>{requirement.affectedUrns.length} governed asset{requirement.affectedUrns.length === 1 ? "" : "s"}</p>
+                <ul className="approval-affected-urns">
+                  {requirement.affectedUrns.slice(0, pageSize).map((urn) => <li key={urn}><code>{urn}</code></li>)}
+                </ul>
+                {requirement.affectedUrns.length > pageSize && (
+                  <details className="nested-evidence-disclosure">
+                    <summary>Show {requirement.affectedUrns.length - pageSize} more affected URN{requirement.affectedUrns.length - pageSize === 1 ? "" : "s"}</summary>
+                    <ul className="approval-affected-urns">
+                      {requirement.affectedUrns.slice(pageSize).map((urn) => <li key={urn}><code>{urn}</code></li>)}
+                    </ul>
+                  </details>
+                )}
                 <dl className="approval-requirement-facts">
                   <div><dt>Requirement</dt><dd>{requirement.requirementKey}</dd></div>
                   <div><dt>Required Git head</dt><dd>{value.revision.headSha}</dd></div>
                 </dl>
               </div>
               <div className="approval-actions">
-                {currentDecisions.length === 0 && (
+                {inspection.verifiedDecision === undefined && (
                   <div className="awaiting-decision"><strong>Awaiting verified GitHub decision</strong><small>Submit the requested review in GitHub, then reconcile.</small></div>
+                )}
+                {inspection.collection === "conflict" && (
+                  <strong className="evidence-defect">Approval decision set is conflicted: expected exactly one decision; found {inspection.records.length}.</strong>
                 )}
                 {decisionRecords.length > 0 && <BoundedEvidence values={decisionRecords} label="GitHub decision" render={(decision) => decision} />}
               </div>
@@ -312,12 +371,19 @@ function timelineEntries(value: ChangeCase): readonly TimelineEntry[] {
     title: "Case created",
     summary: `Git evidence bound to ${value.revision.headSha.slice(0, 10)}`,
   }];
+  const ownerMappings = indexOwnerMappings(value);
+  const verifiedDecisions = new Set(value.approvalRequirements.flatMap((requirement) =>
+    inspectApprovalRequirement(value, requirement, ownerMappings).records
+      .filter((record) => record.verified)
+      .map((record) => record.value)));
   for (const decision of value.approvalDecisions) entries.push({
     key: `decision-${decision.requirementKey}-${decision.decidedAt}`,
     at: decision.decidedAt,
     title: `${decision.role} ${decision.verdict}`,
-    summary: `Verified GitHub actor ${decision.actorLogin}`,
-    failed: decision.verdict === "reject",
+    summary: verifiedDecisions.has(decision)
+      ? `Verified GitHub actor ${decision.actorLogin}`
+      : `Unverified GitHub decision actor ${decision.actorLogin}`,
+    failed: decision.verdict === "reject" || !verifiedDecisions.has(decision),
   });
   for (const receipt of value.validationReceipts) entries.push({
     key: `receipt-${receipt.receiptKey}`,
@@ -352,11 +418,9 @@ export function CaseHistory({ value }: Readonly<{ value: ChangeCase }>) {
         <div className="section-heading"><div><p className="eyebrow">Durable QVAC audit</p><h2 id="agent-run-history-title">Agent run history</h2></div><span className="count">{value.agentRuns.length}</span></div>
         {value.agentRuns.length === 0 ? <Empty>No durable agent runs are recorded for this case.</Empty> : (
           <div className="agent-run-groups">{runs.rows.map((run) => {
-            const failure = run.status === "failed"
-              ? run.events.findLast((event) => event.kind === "run_failed")?.summary
-                ?? run.events.findLast((event) => event.kind === "tool_failed")?.summary
-                ?? "Run failed without verified completion"
-              : undefined;
+            const failure = run.events.findLast((event) => event.kind === "run_failed")?.summary
+              ?? run.events.findLast((event) => event.kind === "tool_failed")?.summary
+              ?? (run.status === "failed" ? "Run failed without verified completion" : undefined);
             return (
               <details className={`agent-run-group agent-run-${run.status.replaceAll("_", "-")}`} open={run.status === "failed"} key={run.runId}>
                 <summary>
@@ -369,13 +433,16 @@ export function CaseHistory({ value }: Readonly<{ value: ChangeCase }>) {
                   <div><dt>Immutable head</dt><dd>{run.headSha}</dd></div>
                   <div><dt>Revision</dt><dd>{run.revisionKey}</dd></div>
                 </dl>
-                <ol className="timeline agent-audit-timeline" aria-label={`Durable agent audit for ${run.runId}`}>
-                  {run.events.map((event) => <li className={event.kind === "run_failed" || event.kind === "tool_failed" ? "timeline-failed" : undefined} key={event.sequence}>
+                <BoundedAgentEvents
+                  events={run.events}
+                  label={`Durable agent audit for ${run.runId}`}
+                  className="timeline agent-audit-timeline"
+                  renderEvent={(event) => <li className={event.kind === "run_failed" || event.kind === "tool_failed" ? "timeline-failed" : undefined} key={event.sequence}>
                     <time dateTime={event.at}>{event.at}</time>
                     <strong>{event.kind.replaceAll("_", " ")}</strong>
                     <span>{event.summary}</span>
-                  </li>)}
-                </ol>
+                  </li>}
+                />
               </details>
             );
           })}</div>

@@ -452,6 +452,215 @@ describe("ChangeMarshal coordination workspace", () => {
     expect(within(approvalsPage).getByText("reviewer-25")).not.toBeNull();
   });
 
+  it("does not present stale, duplicate, wrongly assigned, or incomplete projections as verified work", async () => {
+    const base = caseValue();
+    const work = base.workItems[0]!;
+    const ownerMappings = base.workItems.map((item, index) => [item.ownerUrn, `expected-${index}-gh`] as [string, string]);
+    const projection = base.externalProjections[0]!;
+    const value: ChangeCase = {
+      ...base,
+      ownerMappings,
+      externalProjections: [{
+        ...projection,
+        externalId: "stale-revision",
+        url: "https://github.com/acme/warehouse/issues/stale-revision",
+        revisionKey: "a".repeat(24),
+        assignee: "expected-0-gh",
+      }, {
+        ...projection,
+        externalId: "stale-head",
+        url: "https://github.com/acme/warehouse/issues/stale-head",
+        headSha: "previous-head",
+        assignee: "expected-0-gh",
+      }, {
+        ...projection,
+        externalId: "wrong-assignee",
+        url: "https://github.com/acme/warehouse/issues/wrong-assignee",
+        assignee: "unexpected-gh",
+      }, {
+        ...projection,
+        externalId: "unverified-time",
+        url: "https://github.com/acme/warehouse/issues/unverified-time",
+        assignee: "expected-0-gh",
+        verifiedAt: null,
+      }],
+    };
+    render(<App client={clientFor(value)} sessionClient={localSessionClient} initialPath={casePath(value)} />);
+
+    const summary = await screen.findByLabelText(/case summary/i);
+    expect(within(summary).getByText(`0/${base.workItems.length}`)).not.toBeNull();
+
+    fireEvent.click(within(screen.getByRole("navigation", { name: /case pages/i })).getByRole("link", { name: "Work" }));
+    const projections = await screen.findByRole("region", { name: `GitHub projections for ${work.title}` });
+    expect(within(projections).queryByRole("img", { name: /^Verified:/i })).toBeNull();
+    expect(within(projections).getByText(/expected exactly one projection.*found 4/i)).not.toBeNull();
+    expect(within(projections).getByText(/revision does not match the current governed revision/i)).not.toBeNull();
+    expect(within(projections).getByText(/Git head does not match the current immutable Git head/i)).not.toBeNull();
+    expect(within(projections).getByText(/assignee does not match expected GitHub actor expected-0-gh/i)).not.toBeNull();
+    expect(within(projections).getByText(/projection has not been verified/i)).not.toBeNull();
+  });
+
+  it("shows approval conflicts and binding defects without calling them GitHub-verified", async () => {
+    const base = caseValue();
+    const requirement = base.approvalRequirements[0]!;
+    const expectedActor = "required-reviewer-gh";
+    const staleAt = "2026-08-09T15:00:00.000Z";
+    const mismatchedAt = "2026-08-09T15:01:00.000Z";
+    const value: ChangeCase = {
+      ...base,
+      ownerMappings: [[requirement.ownerUrn, expectedActor]],
+      approvalDecisions: [{
+        requirementKey: requirement.requirementKey,
+        revisionKey: requirement.revisionKey,
+        headSha: "previous-head",
+        role: requirement.role,
+        ownerUrn: requirement.ownerUrn,
+        actorLogin: expectedActor,
+        verdict: "reject",
+        decidedAt: staleAt,
+        source: "github",
+        externalId: "stale-review",
+        url: "https://github.com/acme/warehouse/pull/17#stale-review",
+      }, {
+        requirementKey: requirement.requirementKey,
+        revisionKey: "b".repeat(24),
+        headSha: base.revision.headSha,
+        role: requirement.role === "producer" ? "consumer" : "producer",
+        ownerUrn: "urn:li:corpuser:unexpected-owner",
+        actorLogin: "unexpected-reviewer-gh",
+        verdict: "approve",
+        decidedAt: mismatchedAt,
+        source: "github",
+      }],
+    };
+    render(<App client={clientFor(value)} sessionClient={localSessionClient} initialPath={casePath(value, "approvals")} />);
+
+    const page = (await screen.findByRole("heading", { name: /SHA-bound human approvals/i })).closest("section");
+    if (page === null) throw new Error("Approval page was not rendered");
+    const row = within(page).getByText(requirement.requirementKey).closest("article");
+    if (row === null) throw new Error("Approval requirement row was not rendered");
+    expect(within(row).queryByText(/Verified from GitHub/i)).toBeNull();
+    expect(within(row).getByText(/expected exactly one decision.*found 2/i)).not.toBeNull();
+    expect(within(row).getByText(/revision does not match the current governed revision/i)).not.toBeNull();
+    expect(within(row).getByText(/role does not match the required role/i)).not.toBeNull();
+    expect(within(row).getByText(/owner does not match the required owner URN/i)).not.toBeNull();
+    expect(within(row).getByText(new RegExp(`actor does not match expected GitHub actor ${expectedActor}`, "i"))).not.toBeNull();
+    expect(within(row).getByText(/GitHub provenance is incomplete/i)).not.toBeNull();
+    for (const urn of requirement.affectedUrns) expect(within(row).getByText(urn)).not.toBeNull();
+    expect(within(row).getByText(/verdict reject/i)).not.toBeNull();
+    expect(within(row).getByText(staleAt)).not.toBeNull();
+    expect(within(row).getByText(/verdict approve/i)).not.toBeNull();
+    expect(within(row).getByText(mismatchedAt)).not.toBeNull();
+
+    fireEvent.click(within(screen.getByRole("navigation", { name: /case pages/i })).getByRole("link", { name: "History" }));
+    const timeline = (await screen.findByRole("heading", { name: /verified timeline/i })).closest("section");
+    if (timeline === null) throw new Error("Verified timeline was not rendered");
+    expect(within(timeline).queryByText(/Verified GitHub actor/i)).toBeNull();
+    expect(within(timeline).getAllByText(/Unverified GitHub decision actor/i)).toHaveLength(2);
+  });
+
+  it("paginates an active run's audit events at twenty-five records", async () => {
+    const value = caseValue();
+    const events: AgentRunSnapshot["events"] = Array.from({ length: 26 }, (_, index) => ({
+      kind: index === 0 ? "run_started" as const : "model_connected" as const,
+      sequence: index + 1,
+      at: `2026-08-09T15:00:${String(index).padStart(2, "0")}.000Z`,
+      summary: `Active audit event ${String(index + 1).padStart(2, "0")}`,
+    }));
+    const snapshot: AgentRunSnapshot = {
+      runId: "run-active-bounded",
+      caseKey: value.caseKey,
+      headSha: "a".repeat(40),
+      modelId: "qwen3.6-27b",
+      status: "completed",
+      events,
+    };
+    render(<App
+      client={clientFor(value, { startAgent: async () => snapshot })}
+      sessionClient={localSessionClient}
+      initialPath={casePath(value, "run")}
+    />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /Run QVAC coordinator/i }));
+    const audit = await screen.findByRole("list", { name: /^Agent audit events$/i });
+    expect(audit.children).toHaveLength(25);
+    expect(within(audit).getByText("Active audit event 25")).not.toBeNull();
+    expect(screen.queryByText("Active audit event 26")).toBeNull();
+    expect(screen.getByRole("status", { name: /Agent audit events pagination/i }).textContent).toMatch(/Page 1 of 2.*26 events/i);
+
+    fireEvent.click(screen.getByRole("button", { name: /Next Agent audit events page/i }));
+    expect(audit.children).toHaveLength(1);
+    expect(within(audit).getByText("Active audit event 26")).not.toBeNull();
+  });
+
+  it("paginates each history run's audit events independently at twenty-five records", async () => {
+    const base = caseValue();
+    const events: ChangeCase["agentRuns"][number]["events"] = Array.from({ length: 26 }, (_, index) => ({
+      kind: index === 0 ? "run_started" as const : "model_connected" as const,
+      sequence: index + 1,
+      at: `2026-08-09T16:00:${String(index).padStart(2, "0")}.000Z`,
+      summary: `Historical audit event ${String(index + 1).padStart(2, "0")}`,
+    }));
+    const value: ChangeCase = {
+      ...base,
+      agentRuns: [{
+        runId: "run-history-bounded",
+        caseKey: base.caseKey,
+        revisionKey: base.revision.revisionKey,
+        headSha: base.revision.headSha,
+        modelId: "qwen3.6-27b",
+        status: "completed",
+        events,
+        createdAt: events[0]!.at,
+        updatedAt: events.at(-1)!.at,
+      }],
+    };
+    render(<App client={clientFor(value)} sessionClient={localSessionClient} initialPath={casePath(value, "history")} />);
+
+    const group = (await screen.findByText("run-history-bounded")).closest("details");
+    if (group === null) throw new Error("Historical run disclosure was not rendered");
+    fireEvent.click(within(group).getByText("run-history-bounded"));
+    const audit = within(group).getByRole("list", { name: /Durable agent audit for run-history-bounded/i });
+    expect(audit.children).toHaveLength(25);
+    expect(within(audit).getByText("Historical audit event 25")).not.toBeNull();
+    expect(within(group).queryByText("Historical audit event 26")).toBeNull();
+
+    fireEvent.click(within(group).getByRole("button", { name: /Next Durable agent audit for run-history-bounded page/i }));
+    expect(audit.children).toHaveLength(1);
+    expect(within(audit).getByText("Historical audit event 26")).not.toBeNull();
+  });
+
+  it("keeps tool and run failures visible in a history summary regardless of overall run status", async () => {
+    const base = caseValue();
+    const value: ChangeCase = {
+      ...base,
+      agentRuns: [{
+        runId: "run-completed-with-failure",
+        caseKey: base.caseKey,
+        revisionKey: base.revision.revisionKey,
+        headSha: base.revision.headSha,
+        modelId: "qwen3.6-27b",
+        status: "completed",
+        events: [{
+          kind: "run_started", sequence: 1, at: "2026-08-09T17:00:00.000Z", summary: "Run started",
+        }, {
+          kind: "tool_failed", sequence: 2, at: "2026-08-09T17:01:00.000Z", summary: "GitHub reconciliation failed closed",
+          toolName: "reconcileGitHubWork", toolCallId: "call-failed",
+        }, {
+          kind: "run_completed", sequence: 3, at: "2026-08-09T17:02:00.000Z", summary: "Coordinator returned",
+        }],
+        createdAt: "2026-08-09T17:00:00.000Z",
+        updatedAt: "2026-08-09T17:02:00.000Z",
+      }],
+    };
+    render(<App client={clientFor(value)} sessionClient={localSessionClient} initialPath={casePath(value, "history")} />);
+
+    const group = (await screen.findByText("run-completed-with-failure")).closest("details");
+    if (group === null) throw new Error("Historical run disclosure was not rendered");
+    expect(group.open).toBe(false);
+    expect(group.querySelector(":scope > summary")?.textContent).toMatch(/GitHub reconciliation failed closed/i);
+  });
+
   it("bounds the global case table to twenty-five real rows per page", async () => {
     const values = Array.from({ length: 26 }, (_, index) => caseValue({
       repository: `acme/repository-${String(index).padStart(2, "0")}`,

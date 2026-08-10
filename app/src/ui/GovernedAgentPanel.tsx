@@ -2,6 +2,7 @@ import { useState } from "react";
 
 import type { AgentRunSnapshot } from "../ai/run-events";
 import type { ChangeCase } from "../domain/case";
+import { BoundedAgentEvents } from "./BoundedAgentEvents";
 import { StatusIndicator } from "./StatusIndicator";
 
 export type AgentHealth = Readonly<{ available: true; provider: "qvac"; modelId: string; managed: boolean }>;
@@ -87,7 +88,15 @@ export function GovernedAgentPanel({
         </div>
       )}
       {run?.answer && <article className="agent-answer"><p className="eyebrow">Grounded model response</p><p>{run.answer}</p></article>}
-      {run && <ol className="agent-events" aria-label="Agent audit events">{run.events.map((event) => <li key={event.sequence}><span>{String(event.sequence).padStart(2, "0")}</span><strong>{event.kind.replaceAll("_", " ")}</strong><small>{event.summary}</small></li>)}</ol>}
+      {run && (
+        <BoundedAgentEvents
+          key={run.runId}
+          events={run.events}
+          label="Agent audit events"
+          className="agent-events"
+          renderEvent={(event) => <li key={event.sequence}><span>{String(event.sequence).padStart(2, "0")}</span><strong>{event.kind.replaceAll("_", " ")}</strong><small>{event.summary}</small></li>}
+        />
+      )}
     </section>
   );
 }

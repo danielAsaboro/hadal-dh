@@ -1,9 +1,9 @@
+import { CaseState, type ChangeCase } from "./case";
 import {
-  ApprovalVerdict,
-  CaseState,
-  ProjectionState,
-  type ChangeCase,
-} from "./case";
+  indexOwnerMappings,
+  inspectApprovalRequirement,
+  inspectWorkProjection,
+} from "./policy-evidence";
 
 export interface PolicyObservations {
   readonly currentHeadSha: string;
@@ -43,30 +43,14 @@ export function evaluateCase(
   if (observations.currentHeadSha !== value.revision.headSha) blockers.add("HEAD_SHA_STALE");
   addOwnershipBlockers(value, blockers);
 
-  const mappings = new Map<string, string>();
-  const duplicateMappings = new Set<string>();
-  for (const [owner, login] of value.ownerMappings) {
-    if (mappings.has(owner) && mappings.get(owner) !== login) duplicateMappings.add(owner);
-    mappings.set(owner, login);
-  }
+  const mappings = indexOwnerMappings(value);
   for (const work of value.workItems) {
-    const login = mappings.get(work.ownerUrn);
+    const login = mappings.loginByOwner.get(work.ownerUrn);
     if (login === undefined) blockers.add(`OWNER_MAPPING_MISSING:${work.ownerUrn}`);
-    if (duplicateMappings.has(work.ownerUrn)) blockers.add(`OWNER_MAPPING_AMBIGUOUS:${work.ownerUrn}`);
+    if (mappings.ambiguousOwners.has(work.ownerUrn)) blockers.add(`OWNER_MAPPING_AMBIGUOUS:${work.ownerUrn}`);
 
-    const projections = value.externalProjections.filter((projection) => projection.workKey === work.workKey);
-    if (projections.length === 0) {
-      blockers.add(`PROJECTION_MISSING:${work.workKey}`);
-    } else if (
-      projections.length !== 1
-      || projections[0]?.state !== ProjectionState.Verified
-      || projections[0].revisionKey !== value.revision.revisionKey
-      || projections[0].headSha !== value.revision.headSha
-      || projections[0].verifiedAt === null
-      || projections[0].assignee !== login
-    ) {
-      blockers.add(`PROJECTION_UNVERIFIED:${work.workKey}`);
-    }
+    const projection = inspectWorkProjection(value, work, mappings);
+    if (projection.policyBlocker !== undefined) blockers.add(projection.policyBlocker);
 
     const receipts = value.validationReceipts.filter((receipt) => receipt.workKey === work.workKey);
     if (receipts.length === 0) {
@@ -83,31 +67,8 @@ export function evaluateCase(
   }
 
   for (const requirement of value.approvalRequirements) {
-    const decisions = value.approvalDecisions.filter((decision) =>
-      decision.requirementKey === requirement.requirementKey);
-    if (decisions.length === 0) {
-      blockers.add(`APPROVAL_MISSING:${requirement.requirementKey}`);
-      continue;
-    }
-    if (decisions.length !== 1) {
-      blockers.add(`APPROVAL_CONFLICT:${requirement.requirementKey}`);
-      continue;
-    }
-    const decision = decisions[0];
-    const expectedLogin = mappings.get(requirement.ownerUrn);
-    if (
-      decision?.revisionKey !== value.revision.revisionKey
-      || decision.headSha !== value.revision.headSha
-      || decision.role !== requirement.role
-      || decision.ownerUrn !== requirement.ownerUrn
-      || decision.actorLogin !== expectedLogin
-    ) {
-      blockers.add(`APPROVAL_UNVERIFIED:${requirement.requirementKey}`);
-    } else if (!decision.externalId || !decision.url) {
-      blockers.add(`APPROVAL_PROVENANCE_MISSING:${requirement.requirementKey}`);
-    } else if (decision.verdict === ApprovalVerdict.Reject) {
-      blockers.add(`APPROVAL_REJECTED:${requirement.requirementKey}`);
-    }
+    const approval = inspectApprovalRequirement(value, requirement, mappings);
+    if (approval.policyBlocker !== undefined) blockers.add(approval.policyBlocker);
   }
   if (!value.dataHub.verified && observations.twoPhaseWritebackPending !== true) {
     blockers.add("DATAHUB_WRITEBACK_UNVERIFIED");

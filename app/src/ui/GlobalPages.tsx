@@ -57,7 +57,7 @@ function HomePage({ cases, onNavigate }: Readonly<{ cases: readonly ChangeCase[]
     <main className="global-main" aria-labelledby="home-page-title">
       <header className="global-heading">
         <p className="eyebrow">Governed operations</p>
-        <h1 id="home-page-title">Operational overview</h1>
+        <h1 id="home-page-title" data-page-heading tabIndex={-1}>Operational overview</h1>
         <p>Prioritized from canonical case facts, durable approvals, GitHub projections, and validation receipts.</p>
       </header>
       {cases.length === 0 ? <EmptyCases /> : (
@@ -99,7 +99,7 @@ function CasesPage({ cases, onNavigate }: Readonly<{ cases: readonly ChangeCase[
   const pagination = paginateRows(cases, page);
   return (
     <main className="global-main" aria-labelledby="cases-page-title">
-      <header className="global-heading"><p className="eyebrow">Canonical collection</p><h1 id="cases-page-title">Governed cases</h1><p>Every row is a real ChangeMarshal case read from DataHub.</p></header>
+      <header className="global-heading"><p className="eyebrow">Canonical collection</p><h1 id="cases-page-title" data-page-heading tabIndex={-1}>Governed cases</h1><p>Every row is a real ChangeMarshal case read from DataHub.</p></header>
       {cases.length === 0 ? <EmptyCases /> : (
         <section className="global-table-panel">
           <table aria-label="Governed cases">
@@ -125,7 +125,7 @@ function WorkPage({ cases, onNavigate }: Readonly<{ cases: readonly ChangeCase[]
   const pagination = paginateRows(selectWorkRows(cases), page);
   return (
     <main className="global-main" aria-labelledby="work-page-title">
-      <header className="global-heading"><p className="eyebrow">Named accountability</p><h1 id="work-page-title">Owner work</h1><p>Work items, verified GitHub projections, and validation receipts flattened from real case records.</p></header>
+      <header className="global-heading"><p className="eyebrow">Named accountability</p><h1 id="work-page-title" data-page-heading tabIndex={-1}>Owner work</h1><p>Work items, verified GitHub projections, and validation receipts flattened from real case records.</p></header>
       <section className="global-table-panel">
         <table aria-label="Owner work">
           <thead><tr><th scope="col">Case</th><th scope="col">Work</th><th scope="col">Owner</th><th scope="col">Evidence</th></tr></thead>
@@ -153,7 +153,7 @@ function ApprovalsPage({ cases, onNavigate }: Readonly<{ cases: readonly ChangeC
   const pagination = paginateRows(selectApprovalRows(cases), page);
   return (
     <main className="global-main" aria-labelledby="approvals-page-title">
-      <header className="global-heading"><p className="eyebrow">Human authority</p><h1 id="approvals-page-title">Governed approvals</h1><p>GitHub decisions are reported here. Pending QVAC mutation gates remain resolvable only inside their case Run page.</p></header>
+      <header className="global-heading"><p className="eyebrow">Human authority</p><h1 id="approvals-page-title" data-page-heading tabIndex={-1}>Governed approvals</h1><p>GitHub decisions are reported here. Pending QVAC mutation gates remain resolvable only inside their case Run page.</p></header>
       <section className="global-table-panel">
         <table aria-label="Governed approvals">
           <thead><tr><th scope="col">Case</th><th scope="col">Gate</th><th scope="col">Authority</th><th scope="col">Recorded outcome</th></tr></thead>

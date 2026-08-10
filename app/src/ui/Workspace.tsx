@@ -1,11 +1,12 @@
 import { useEffect, useState, type ReactNode } from "react";
 
 import { AgentRunSnapshotSchema, type AgentRunSnapshot } from "../ai/run-events";
+import type { DurableAgentRun } from "../domain/agent-audit";
 import { ChangeCaseSchema, type ChangeCase } from "../domain/case";
 import { AppRail, CasePicker, MobileWorkspaceMenu, type RailSessionAction } from "./AppRail";
 import { CasePage } from "./CasePage";
 import { GlobalPage } from "./GlobalPages";
-import type { AgentHealth, AgentHealthState } from "./GovernedAgentPanel";
+import type { AgentHealth, AgentHealthState, AgentRunRehydrationState } from "./GovernedAgentPanel";
 import type { AppRoute } from "./routes";
 
 export {
@@ -22,6 +23,7 @@ export interface WorkspaceClient {
   reconcile(caseKey: string): Promise<ChangeCase>;
   decide(caseKey: string, targetUrl: string): Promise<ChangeCase>;
   agentHealth(): Promise<AgentHealth>;
+  getAgentRun?(runId: string): Promise<AgentRunSnapshot>;
   startAgent(caseKey: string, prompt: string): Promise<AgentRunSnapshot>;
   approveAgent(runId: string, token: string, approved: boolean, reason: string): Promise<AgentRunSnapshot>;
 }
@@ -50,6 +52,7 @@ export const httpWorkspaceClient: WorkspaceClient = {
     method: "POST", body: JSON.stringify({ targetUrl }),
   })),
   agentHealth: async () => await request("/api/agent/health") as AgentHealth,
+  getAgentRun: async (runId) => AgentRunSnapshotSchema.parse(await request(`/api/agent/runs/${runId}`)),
   startAgent: async (caseKey, prompt) => AgentRunSnapshotSchema.parse(await request("/api/agent/runs", {
     method: "POST", body: JSON.stringify({ caseKey, prompt }),
   })),
@@ -64,6 +67,31 @@ function messageFrom(caught: unknown, fallback: string): string {
 }
 
 type AuthenticatedWorkspaceRoute = Exclude<AppRoute, { kind: "landing" | "public-not-found" | "case-redirect" | "workspace-not-found" }>;
+
+function latestDurablePendingRun(value: ChangeCase): DurableAgentRun | undefined {
+  return [...value.agentRuns]
+    .filter((run) => run.status === "waiting_for_approval" && run.pendingApproval !== undefined)
+    .sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt) || left.runId.localeCompare(right.runId))[0];
+}
+
+function verifyRehydratedRun(snapshot: AgentRunSnapshot, durable: DurableAgentRun): void {
+  if (snapshot.runId !== durable.runId || snapshot.caseKey !== durable.caseKey || snapshot.headSha !== durable.headSha) {
+    throw new Error("The recovered coordinator run did not match the durable case, run ID, and immutable Git head");
+  }
+  if (snapshot.status !== "waiting_for_approval") return;
+  const pending = snapshot.pendingApproval;
+  const durablePending = durable.pendingApproval;
+  if (
+    pending === undefined
+    || durablePending === undefined
+    || pending.approvalId !== durablePending.approvalId
+    || pending.toolCallId !== durablePending.toolCallId
+    || pending.toolName !== durablePending.toolName
+    || pending.argumentsHash !== durablePending.argumentsHash
+    || pending.requestedAt !== durablePending.requestedAt
+    || pending.expiresAt !== durablePending.expiresAt
+  ) throw new Error("The recovered approval token was not bound to the exact durable pending scope");
+}
 
 export function Workspace({ client = httpWorkspaceClient, sessionAction, route, onNavigate }: Readonly<{
   client?: WorkspaceClient;
@@ -80,7 +108,8 @@ export function Workspace({ client = httpWorkspaceClient, sessionAction, route, 
   const [error, setError] = useState<string>();
   const [agentHealth, setAgentHealth] = useState<AgentHealthState>({ status: "checking" });
   const [healthKey, setHealthKey] = useState(0);
-  const [agentRun, setAgentRun] = useState<AgentRunSnapshot>();
+  const [agentRunsByCase, setAgentRunsByCase] = useState<Record<string, AgentRunSnapshot | undefined>>({});
+  const [runRehydrationByCase, setRunRehydrationByCase] = useState<Record<string, AgentRunRehydrationState | undefined>>({});
   const runRouteActive = route.kind === "case" && route.page === "run";
 
   useEffect(() => {
@@ -103,6 +132,17 @@ export function Workspace({ client = httpWorkspaceClient, sessionAction, route, 
   const current = route.kind === "case"
     ? cases.find((item) => item.caseKey === route.caseKey)
     : retainedCase;
+  const currentCaseKey = current?.caseKey;
+  const visibleRun = currentCaseKey === undefined ? undefined : agentRunsByCase[currentCaseKey];
+  const durablePendingRun = current === undefined ? undefined : latestDurablePendingRun(current);
+  const visibleRunRehydration = currentCaseKey === undefined ? undefined : runRehydrationByCase[currentCaseKey];
+
+  useEffect(() => setError(undefined), [route]);
+
+  useEffect(() => {
+    if (loading) return;
+    document.querySelector<HTMLElement>(".workspace-content [data-page-heading]")?.focus({ preventScroll: true });
+  }, [loading, route, currentCaseKey]);
 
   useEffect(() => {
     if (!runRouteActive) return;
@@ -117,6 +157,35 @@ export function Workspace({ client = httpWorkspaceClient, sessionAction, route, 
     });
     return () => { active = false; };
   }, [client, healthKey, runRouteActive]);
+
+  useEffect(() => {
+    if (!runRouteActive || currentCaseKey === undefined || durablePendingRun === undefined || visibleRun !== undefined) return;
+    let active = true;
+    const unavailable = (message: string) => {
+      if (!active) return;
+      setRunRehydrationByCase((existing) => ({
+        ...existing,
+        [currentCaseKey]: { status: "unavailable", run: durablePendingRun, message },
+      }));
+    };
+    setRunRehydrationByCase((existing) => ({
+      ...existing,
+      [currentCaseKey]: { status: "loading", runId: durablePendingRun.runId },
+    }));
+    if (client.getAgentRun === undefined) {
+      unavailable("This workspace client cannot retrieve the exact run snapshot.");
+      return () => { active = false; };
+    }
+    void client.getAgentRun(durablePendingRun.runId).then((snapshot) => {
+      if (!active) return;
+      verifyRehydratedRun(snapshot, durablePendingRun);
+      setAgentRunsByCase((existing) => ({ ...existing, [currentCaseKey]: snapshot }));
+      setRunRehydrationByCase((existing) => ({ ...existing, [currentCaseKey]: undefined }));
+    }).catch((caught: unknown) => {
+      unavailable(messageFrom(caught, "The exact coordinator state and approval token are unavailable."));
+    });
+    return () => { active = false; };
+  }, [client, currentCaseKey, durablePendingRun, runRouteActive, visibleRun]);
 
   const updateCase = (value: ChangeCase) => {
     setRetainedCase(value);
@@ -152,10 +221,13 @@ export function Workspace({ client = httpWorkspaceClient, sessionAction, route, 
 
   const coordinate = async (prompt: string) => {
     if (current === undefined || agentHealth.status !== "available") return;
+    const caseKey = current.caseKey;
     setBusy("agent");
     setError(undefined);
     try {
-      setAgentRun(await client.startAgent(current.caseKey, prompt));
+      const started = await client.startAgent(caseKey, prompt);
+      if (started.caseKey !== caseKey) throw new Error("QVAC returned a run for a different governed case");
+      setAgentRunsByCase((existing) => ({ ...existing, [caseKey]: started }));
     } catch (caught) {
       setError(messageFrom(caught, "QVAC run failed without verified completion"));
     } finally {
@@ -163,19 +235,24 @@ export function Workspace({ client = httpWorkspaceClient, sessionAction, route, 
     }
   };
 
-  const resolveAgentApproval = async (approved: boolean) => {
+  const resolveAgentApproval = async (caseKey: string, approved: boolean) => {
+    const agentRun = agentRunsByCase[caseKey];
     const pending = agentRun?.pendingApproval;
-    const runCase = agentRun === undefined ? undefined : cases.find((item) => item.caseKey === agentRun.caseKey);
-    if (agentRun === undefined || pending === undefined || runCase === undefined) return;
+    const runCase = cases.find((item) => item.caseKey === caseKey);
+    if (agentRun === undefined || pending === undefined || runCase === undefined || agentRun.caseKey !== caseKey) return;
     setBusy("agent-approval");
     setError(undefined);
     try {
-      setAgentRun(await client.approveAgent(
+      const resolved = await client.approveAgent(
         agentRun.runId,
         pending.token,
         approved,
         approved ? "Approved in ChangeMarshal command center" : "Denied in ChangeMarshal command center",
-      ));
+      );
+      if (resolved.runId !== agentRun.runId || resolved.caseKey !== caseKey) {
+        throw new Error("QVAC returned an approval result outside the exact governed run scope");
+      }
+      setAgentRunsByCase((existing) => ({ ...existing, [caseKey]: resolved }));
       const reread = await client.getCase(runCase.caseKey);
       setCases((existing) => existing.map((item) => item.caseKey === reread.caseKey ? reread : item));
       setRetainedCase((selected) => selected?.caseKey === reread.caseKey ? reread : selected);
@@ -237,14 +314,13 @@ export function Workspace({ client = httpWorkspaceClient, sessionAction, route, 
     return renderShell(
       <main className="case-main center-state" aria-labelledby="case-not-found-title">
         <div>
-          <h1 id="case-not-found-title">Case not found</h1>
+          <h1 id="case-not-found-title" data-page-heading tabIndex={-1}>Case not found</h1>
           <p>The requested governed case is not available from the canonical DataHub case collection.</p>
         </div>
       </main>,
     );
   }
 
-  const visibleRun = agentRun?.caseKey === current.caseKey ? agentRun : undefined;
   const actionStatus = busy === "sync"
     ? "Syncing owner work…"
     : busy === "reconcile"
@@ -264,13 +340,14 @@ export function Workspace({ client = httpWorkspaceClient, sessionAction, route, 
       actionStatus={actionStatus}
       health={agentHealth}
       {...(visibleRun === undefined ? {} : { run: visibleRun })}
+      {...(visibleRunRehydration === undefined ? {} : { runRehydration: visibleRunRehydration })}
       onNavigate={onNavigate}
       onOpenCase={selectCase}
       onSync={() => void mutate("sync", () => client.sync(current.caseKey))}
       onReconcile={() => void mutate("reconcile", () => client.reconcile(current.caseKey))}
       onEvaluate={() => void mutate("decide", () => client.decide(current.caseKey, window.location.href))}
       onRun={(prompt) => void coordinate(prompt)}
-      onResolveApproval={(approved) => void resolveAgentApproval(approved)}
+      onResolveApproval={(approved) => void resolveAgentApproval(current.caseKey, approved)}
       onRetryHealth={() => setHealthKey((value) => value + 1)}
     />,
   );

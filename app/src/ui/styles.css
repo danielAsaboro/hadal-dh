@@ -621,6 +621,23 @@ code, .sha, dd { font-family: "SFMono-Regular", Consolas, "Liberation Mono", mon
   line-height: 1.55;
 }
 .agent-run-button { min-width: 190px; }
+.agent-rehydration-state,
+.agent-empty-state {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 9px;
+  margin: 0;
+  padding: 13px 14px;
+  border: 1px solid #555c50;
+  border-radius: 10px;
+  background: #11130f;
+  color: #c6ccc0;
+  font-size: 10px;
+  line-height: 1.5;
+}
+.agent-rehydration-state span:last-child { flex-basis: 100%; color: #a9b0a3; }
 .agent-approval-card {
   grid-column: 1 / -1;
   display: flex;
@@ -636,10 +653,12 @@ code, .sha, dd { font-family: "SFMono-Regular", Consolas, "Liberation Mono", mon
 .agent-approval-card p { margin: 5px 0 0; color: #c6b997; font-size: 11px; }
 .agent-approval-card .eyebrow { color: #ffd987; }
 .agent-approval-card code { color: var(--lime); }
+.agent-approval-unavailable { border-color: #858c81; background: #22251f; }
+.agent-approval-unavailable .integration-heading h3 { margin: 0; }
 .approval-scope { display: grid; gap: 1px; margin: 15px 0; border-top: 1px solid #5e533d; }
 .approval-scope div { display: grid; grid-template-columns: 135px minmax(0, 1fr); gap: 12px; padding: 8px 0; border-bottom: 1px solid #5e533d; }
 .approval-scope dt { color: #a89a7d; font-size: 9px; text-transform: uppercase; letter-spacing: .08em; }
-.approval-scope dd { min-width: 0; margin: 0; color: #d7ceb7; font-size: 10px; }
+.approval-scope dd { min-width: 0; margin: 0; color: #d7ceb7; font-size: 10px; overflow-wrap: anywhere; }
 .mutation-boundary { max-width: 790px; line-height: 1.55; }
 .agent-approval-buttons { display: flex; flex: 0 0 auto; gap: 8px; }
 .agent-approval-buttons button:first-child { border-color: #d57b6c; background: #4a211c; color: #ffb2a5; }
@@ -1032,6 +1051,11 @@ code, .sha, dd { font-family: "SFMono-Regular", Consolas, "Liberation Mono", mon
     scroll-behavior: auto !important;
     transition-duration: .01ms !important;
   }
+}
+
+[data-page-heading]:focus {
+  outline: 3px solid var(--blue);
+  outline-offset: 5px;
 }
 
 :focus-visible,

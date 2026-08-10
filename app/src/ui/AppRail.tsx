@@ -2,7 +2,7 @@ import { useState, type MouseEvent, type ReactNode } from "react";
 
 import type { ChangeCase } from "../domain/case";
 import type { AppRoute, WorkspacePage } from "./routes";
-import { caseMatchesQuery } from "./workspace-selectors";
+import { caseMatchesQuery, WORKSPACE_PAGE_SIZE } from "./workspace-selectors";
 
 export interface RailSessionAction {
   readonly busy: boolean;
@@ -144,7 +144,9 @@ export function CasePicker({ cases, disabled, onOpenCase }: Readonly<{
   onOpenCase: (caseKey: string) => Promise<void>;
 }>) {
   const [query, setQuery] = useState("");
-  const matches = query.trim().length === 0 ? [] : cases.filter((value) => caseMatchesQuery(value, query));
+  const allMatches = query.trim().length === 0 ? [] : cases.filter((value) => caseMatchesQuery(value, query));
+  const matches = allMatches.slice(0, WORKSPACE_PAGE_SIZE);
+  const resultsVisible = query.trim().length > 0;
   return (
     <div className="case-picker">
       <label htmlFor="workspace-case-picker">Find a governed case</label>
@@ -155,11 +157,16 @@ export function CasePicker({ cases, disabled, onOpenCase }: Readonly<{
         value={query}
         disabled={disabled}
         autoComplete="off"
+        aria-controls={resultsVisible ? "workspace-case-picker-results" : undefined}
+        aria-expanded={resultsVisible}
         placeholder="Case key, repository, or model"
         onChange={(event) => setQuery(event.currentTarget.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") setQuery("");
+        }}
       />
-      {query.trim().length > 0 && (
-        <div className="case-picker-results" role="list" aria-label="Matching governed cases">
+      {resultsVisible && (
+        <div id="workspace-case-picker-results" className="case-picker-results" role="list" aria-label="Matching governed cases">
           {matches.map((value) => (
             <div key={value.caseKey} role="listitem">
               <a
@@ -177,6 +184,9 @@ export function CasePicker({ cases, disabled, onOpenCase }: Readonly<{
             </div>
           ))}
           {matches.length === 0 && <p role="status">No real governed cases match this search.</p>}
+          {allMatches.length > WORKSPACE_PAGE_SIZE && (
+            <p role="status">Showing the first {WORKSPACE_PAGE_SIZE} of {allMatches.length} governed cases. Refine the search to narrow the collection.</p>
+          )}
         </div>
       )}
     </div>

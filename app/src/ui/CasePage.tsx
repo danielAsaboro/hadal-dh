@@ -10,7 +10,7 @@ import {
   CaseWork,
   StatePill,
 } from "./CaseSections";
-import { GovernedAgentPanel, type AgentHealthState } from "./GovernedAgentPanel";
+import { GovernedAgentPanel, type AgentHealthState, type AgentRunRehydrationState } from "./GovernedAgentPanel";
 import { casePages, type CasePage as CasePageName } from "./routes";
 
 const GraphPage = lazy(() => import("./GraphPage"));
@@ -48,7 +48,7 @@ function CaseIdentity({ value, cases, page, busy, onNavigate, onOpenCase }: Read
       <header className="case-header">
         <div>
           <p className="eyebrow">{value.repository} · {value.caseKey}</p>
-          <h1 id="case-title">{value.change.modelName} governed change</h1>
+          <h1 id="case-title" data-page-heading tabIndex={-1}>{value.change.modelName} governed change</h1>
           <p className="change-line" aria-label={`${value.change.oldName} → ${value.change.newName}`}><code>{value.change.oldName}</code><span>→</span><code>{value.change.newName}</code></p>
         </div>
         <div className="header-state">
@@ -85,6 +85,7 @@ export function CasePage({
   actionStatus,
   health,
   run,
+  runRehydration,
   onNavigate,
   onOpenCase,
   onSync,
@@ -101,6 +102,7 @@ export function CasePage({
   actionStatus: string;
   health: AgentHealthState;
   run?: AgentRunSnapshot;
+  runRehydration?: AgentRunRehydrationState;
   onNavigate: (destination: string) => void;
   onOpenCase: (caseKey: string) => Promise<void>;
   onSync: () => void;
@@ -147,6 +149,7 @@ export function CasePage({
             value={value}
             health={health}
             {...(run === undefined ? {} : { run })}
+            {...(runRehydration === undefined ? {} : { rehydration: runRehydration })}
             {...(busy === undefined ? {} : { busy })}
             onRun={onRun}
             onResolveApproval={onResolveApproval}

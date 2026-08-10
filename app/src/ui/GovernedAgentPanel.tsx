@@ -1,6 +1,7 @@
 import { useState } from "react";
 
 import type { AgentRunSnapshot } from "../ai/run-events";
+import type { DurableAgentRun } from "../domain/agent-audit";
 import type { ChangeCase } from "../domain/case";
 import { BoundedAgentEvents } from "./BoundedAgentEvents";
 import { StatusIndicator } from "./StatusIndicator";
@@ -11,12 +12,17 @@ export type AgentHealthState =
   | Readonly<{ status: "available"; value: AgentHealth }>
   | Readonly<{ status: "unavailable"; message: string }>;
 
+export type AgentRunRehydrationState =
+  | Readonly<{ status: "loading"; runId: string }>
+  | Readonly<{ status: "unavailable"; run: DurableAgentRun; message: string }>;
+
 const initialPrompt = "Call readCase for this exact governed case. Then call generateRemediation for that exact case once to create its compatibility remediation. Do not call any other mutating tool. After its verified result, summarize and stop.";
 
 export function GovernedAgentPanel({
   value,
   health,
   run,
+  rehydration,
   busy,
   onRun,
   onResolveApproval,
@@ -25,6 +31,7 @@ export function GovernedAgentPanel({
   value: ChangeCase;
   health: AgentHealthState;
   run?: AgentRunSnapshot;
+  rehydration?: AgentRunRehydrationState;
   busy?: string;
   onRun: (prompt: string) => void;
   onResolveApproval: (approved: boolean) => void;
@@ -32,10 +39,12 @@ export function GovernedAgentPanel({
 }>) {
   const [prompt, setPrompt] = useState(initialPrompt);
   const pending = run?.pendingApproval;
+  const durablePending = rehydration?.status === "unavailable" ? rehydration.run.pendingApproval : undefined;
   const healthAvailable = health.status === "available";
+  const resumeBlocked = rehydration !== undefined;
 
   return (
-    <section className="agent-console" aria-label="QVAC coordination controls">
+    <section className="agent-console" aria-label="QVAC coordination controls" aria-busy={rehydration?.status === "loading"}>
       <div className="agent-console-copy">
         <p className="eyebrow">Local AI · governed tools</p>
         {health.status === "available" && <div className="integration-heading"><StatusIndicator status="verified" /><h2>{health.value.modelId} coordinator</h2></div>}
@@ -58,11 +67,39 @@ export function GovernedAgentPanel({
       </div>
       <button
         className="agent-run-button"
-        disabled={busy !== undefined || !healthAvailable || prompt.trim().length === 0}
+        disabled={busy !== undefined || !healthAvailable || resumeBlocked || prompt.trim().length === 0}
         onClick={() => onRun(prompt)}
       >
         {busy === "agent" ? "Running real model…" : "Run QVAC coordinator"}
       </button>
+      {rehydration?.status === "loading" && (
+        <div className="agent-rehydration-state" role="status">
+          <StatusIndicator status="active" />
+          <strong>Restoring durable QVAC run {rehydration.runId}…</strong>
+          <span>Mutation controls remain disabled until the exact in-memory approval token is verified.</span>
+        </div>
+      )}
+      {rehydration?.status === "unavailable" && durablePending !== undefined && (
+        <div className="agent-approval-card agent-approval-unavailable" role="group" aria-label={`Approval cannot be resumed for ${durablePending.toolName}`}>
+          <div>
+            <p className="eyebrow">— Durable pending mutation gate</p>
+            <div className="integration-heading"><StatusIndicator status="unavailable" /><h3>{durablePending.toolName}</h3></div>
+            <dl className="approval-scope">
+              <div><dt>Run</dt><dd><code>{rehydration.run.runId}</code></dd></div>
+              <div><dt>Tool</dt><dd><code>{durablePending.toolName}</code></dd></div>
+              <div><dt>Case key</dt><dd><code>{rehydration.run.caseKey}</code></dd></div>
+              <div><dt>Repository</dt><dd><code>{value.repository}</code></dd></div>
+              <div><dt>Immutable head SHA</dt><dd><code>{rehydration.run.headSha}</code></dd></div>
+              <div><dt>Arguments hash</dt><dd><code>{durablePending.argumentsHash}</code></dd></div>
+              <div><dt>Expires</dt><dd><time dateTime={durablePending.expiresAt}>{durablePending.expiresAt}</time></dd></div>
+            </dl>
+            <p className="mutation-boundary">
+              Approval cannot be resumed because the coordinator state or exact token is unavailable. {rehydration.message}
+              The durable scope remains visible for audit, but no mutation control is enabled.
+            </p>
+          </div>
+        </div>
+      )}
       {pending && run && (
         <div className="agent-approval-card" role="group" aria-label={`Approval required for ${pending.toolName}`}>
           <div>
@@ -96,6 +133,9 @@ export function GovernedAgentPanel({
           className="agent-events"
           renderEvent={(event) => <li key={event.sequence}><span>{String(event.sequence).padStart(2, "0")}</span><strong>{event.kind.replaceAll("_", " ")}</strong><small>{event.summary}</small></li>}
         />
+      )}
+      {run === undefined && rehydration === undefined && (
+        <p className="agent-empty-state" role="status">No active QVAC run is available for this governed case.</p>
       )}
     </section>
   );

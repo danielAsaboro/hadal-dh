@@ -841,9 +841,9 @@ code, .sha, dd { font-family: "SFMono-Regular", Consolas, "Liberation Mono", mon
   }
 }
 
-:focus-visible {
-  position: relative;
-  z-index: 5;
+:focus-visible,
+.flow-canvas .react-flow__node:focus-visible,
+.flow-canvas .react-flow__controls-button:focus-visible {
   outline: 3px solid #ffffff;
   outline-offset: 2px;
   box-shadow: 0 0 0 8px #11130f !important;

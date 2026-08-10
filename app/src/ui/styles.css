@@ -29,12 +29,14 @@ h2 { margin: 4px 0 0; font-size: 20px; letter-spacing: -.025em; }
 h3 { margin: 10px 0 5px; font-size: 14px; }
 .change-line { display: flex; align-items: center; gap: 10px; margin: 0; color: #8f98aa; }
 .change-line code { padding: 5px 8px; border: 1px solid #2c303a; border-radius: 6px; background: #151820; color: #cbd1dd; }
-.header-state { display: flex; align-items: center; gap: 10px; }
-.sha { color: #7e8797; font: 12px ui-monospace, monospace; }
+.header-state { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 10px; min-width: 0; }
+.sha { color: #7e8797; font: 12px ui-monospace, monospace; overflow-wrap: anywhere; }
 .state-pill { display: inline-flex; width: fit-content; border: 1px solid #353a47; border-radius: 999px; padding: 4px 8px; color: #aeb5c3; background: #1b1e26; font-size: 10px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; white-space: nowrap; }
 .state-ready, .state-allowed, .state-approve, .state-verified { color: #78e6ae; border-color: #275740; background: #11291f; }
 .state-blocked, .state-reject, .state-error { color: #ff9a8e; border-color: #6c342f; background: #2a1718; }
 .error-banner { margin: 16px 0; border: 1px solid #6c342f; background: #291719; color: #ffaea5; padding: 13px 15px; border-radius: 10px; }
+.case-sections { display: flex; flex-wrap: wrap; gap: 7px; margin: 0 0 12px; }
+.case-sections a { border: 1px solid #303541; border-radius: 999px; padding: 7px 11px; color: #99a2b2; font-size: 11px; text-decoration: none; }
 .command-bar { display: flex; gap: 8px; padding: 10px; border: 1px solid #272b35; background: rgba(19,22,29,.75); border-radius: 12px; }
 .command-bar button, .approval-actions button { border: 1px solid #343947; background: #20242d; color: #cbd1dd; border-radius: 8px; padding: 9px 12px; font-weight: 650; }
 .command-bar .primary-action { margin-left: auto; background: #d6ff57; color: #11130e; border-color: #d6ff57; }
@@ -45,6 +47,11 @@ h3 { margin: 10px 0 5px; font-size: 14px; }
 .agent-approval-card { grid-column: 1 / -1; border-top: 1px solid #394232; padding-top: 14px; display: flex; align-items: center; justify-content: space-between; gap: 18px; }
 .agent-approval-card p { margin: 5px 0 0; color: #8f9987; font-size: 11px; }
 .agent-approval-card code { color: #d6ff57; }
+.approval-scope { display: grid; gap: 5px; margin: 12px 0; }
+.approval-scope div { display: grid; grid-template-columns: 130px minmax(0, 1fr); gap: 12px; }
+.approval-scope dt { color: #7f8978; font-size: 10px; }
+.approval-scope dd { min-width: 0; margin: 0; color: #b8c2b1; font: 11px ui-monospace, monospace; overflow-wrap: anywhere; }
+.mutation-boundary { max-width: 760px; line-height: 1.5; }
 .agent-approval-buttons { display: flex; gap: 8px; }
 .agent-approval-buttons button:first-child { border-color: #653e39; background: #29191a; color: #ff9a8e; }
 .agent-answer { grid-column: 1 / -1; border: 1px solid #394232; border-radius: 9px; padding: 13px; background: rgba(10,13,11,.62); }

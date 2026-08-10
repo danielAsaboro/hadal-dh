@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { AgentRunSnapshot } from "../../src/ai/run-events";
@@ -243,7 +243,8 @@ describe("ChangeMarshal coordination workspace", () => {
     fireEvent.change(await screen.findByLabelText(/operator passphrase/i), { target: { value: "operator-passphrase" } });
     fireEvent.click(screen.getByRole("button", { name: /sign in to workspace/i }));
 
-    expect(await screen.findByText("Loading governed cases…")).not.toBeNull();
+    const loading = await screen.findByRole("status", { name: /governed case loading status/i });
+    expect(loading.textContent).toContain("Loading governed cases…");
     expect(signIn).toHaveBeenCalledWith("operator-passphrase");
     expect(read).toHaveBeenCalledTimes(2);
     expect(listCases).toHaveBeenCalledTimes(1);
@@ -337,14 +338,114 @@ describe("ChangeMarshal coordination workspace", () => {
     const run = await screen.findByRole("button", { name: /Run QVAC coordinator/i });
     fireEvent.click(run);
     const approve = await screen.findByRole("button", { name: /Approve generateRemediation/i });
+    const gate = screen.getByRole("group", { name: /Approval required for generateRemediation/i });
     expect(startAgent).toHaveBeenCalledWith(
       value.caseKey,
       expect.stringMatching(/compatibility remediation/i),
     );
-    expect(screen.getByText(/exact arguments hash/i)).not.toBeNull();
+    expect(gate.textContent).toContain("generateRemediation");
+    expect(gate.textContent).toContain(value.caseKey);
+    expect(gate.textContent).toContain(value.repository);
+    expect(gate.textContent).toContain(pending.headSha);
+    expect(gate.textContent).toContain(pending.pendingApproval!.argumentsHash);
+    expect(gate.textContent).toContain(pending.pendingApproval!.expiresAt);
+    expect(gate.textContent).toMatch(/authorizes only this exact hashed tool call/i);
+    expect(gate.textContent).toMatch(/may mutate configured systems/i);
+    expect(within(gate).getByText(/no outcome or artifact path is guaranteed/i)).not.toBeNull();
     fireEvent.click(approve);
     await waitFor(() => expect(approveAgent).toHaveBeenCalledWith(
       "run-real-1", "token-real-1", true, "Approved in ChangeMarshal command center",
     ));
+  });
+
+  it("preserves exact denial callback arguments at the human mutation gate", async () => {
+    const value = caseValue();
+    const pending: AgentRunSnapshot = {
+      runId: "run-real-deny", caseKey: value.caseKey, headSha: value.revision.headSha.padEnd(40, "b").slice(0, 40),
+      modelId: "qwen3.6-27b", status: "waiting_for_approval",
+      events: [{ kind: "approval_required", sequence: 1, at: "2026-08-09T15:00:00.000Z", summary: "Approval required for generateRemediation", toolName: "generateRemediation", toolCallId: "call-deny", approvalId: "approval-deny", argumentsHash: "b".repeat(64) }],
+      pendingApproval: { token: "token-real-deny", approvalId: "approval-deny", toolCallId: "call-deny", toolName: "generateRemediation", argumentsHash: "b".repeat(64), requestedAt: "2026-08-09T15:00:00.000Z", expiresAt: "2026-08-09T15:15:00.000Z" },
+    };
+    const approveAgent = vi.fn(async () => ({ ...pending, status: "completed" as const, pendingApproval: undefined }));
+    const client: WorkspaceClient = {
+      listCases: async () => [value], getCase: async () => value, sync: async () => value,
+      reconcile: async () => value, decide: async () => value,
+      agentHealth: async () => ({ available: true, provider: "qvac", modelId: "qwen3.6-27b", managed: true }),
+      startAgent: async () => pending,
+      approveAgent,
+    };
+    render(<App client={client} sessionClient={localSessionClient} initialPath="/workspace" />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /Run QVAC coordinator/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /Deny generateRemediation/i }));
+
+    await waitFor(() => expect(approveAgent).toHaveBeenCalledWith(
+      "run-real-deny", "token-real-deny", false, "Denied in ChangeMarshal command center",
+    ));
+  });
+
+  it("explains an unavailable QVAC integration and retries its real health check", async () => {
+    const value = caseValue();
+    const agentHealth = vi.fn()
+      .mockRejectedValueOnce(new Error("QVAC endpoint offline"))
+      .mockResolvedValueOnce({ available: true, provider: "qvac", modelId: "qwen3.6-27b", managed: true });
+    const client: WorkspaceClient = {
+      listCases: async () => [value], getCase: async () => value, sync: async () => value,
+      reconcile: async () => value, decide: async () => value, agentHealth,
+      startAgent: async () => { throw new Error("not used"); },
+      approveAgent: async () => { throw new Error("not used"); },
+    };
+    render(<App client={client} sessionClient={localSessionClient} initialPath="/workspace" />);
+
+    const status = await screen.findByRole("status", { name: /QVAC integration status/i });
+    expect(status.textContent).toMatch(/unavailable.*QVAC endpoint offline/i);
+    expect(status.textContent).toMatch(/coordination remains disabled until a verified health check succeeds/i);
+    expect(screen.getByRole("button", { name: /Retry QVAC health check/i })).not.toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /Retry QVAC health check/i }));
+    expect(await screen.findByRole("heading", { name: /qwen3.6-27b coordinator/i })).not.toBeNull();
+    expect(agentHealth).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps a failed DataHub case load visible and retries without hiding the failure", async () => {
+    const value = caseValue();
+    let finishRetry: ((values: readonly ChangeCase[]) => void) | undefined;
+    const retryResult = new Promise<readonly ChangeCase[]>((resolve) => { finishRetry = resolve; });
+    const listCases = vi.fn()
+      .mockRejectedValueOnce(new Error("DataHub graph request timed out"))
+      .mockReturnValueOnce(retryResult);
+    const client: WorkspaceClient = {
+      listCases, getCase: async () => value, sync: async () => value,
+      reconcile: async () => value, decide: async () => value,
+      agentHealth: async () => ({ available: true, provider: "qvac", modelId: "qwen3.6-27b", managed: true }),
+      startAgent: async () => { throw new Error("not used"); },
+      approveAgent: async () => { throw new Error("not used"); },
+    };
+    render(<App client={client} sessionClient={localSessionClient} initialPath="/workspace" />);
+
+    const failure = await screen.findByRole("alert");
+    expect(failure.textContent).toMatch(/DataHub case load failed.*DataHub graph request timed out/i);
+    fireEvent.click(screen.getByRole("button", { name: /Retry governed case load/i }));
+
+    expect(await screen.findByRole("status", { name: /governed case loading status/i })).not.toBeNull();
+    expect(screen.getByRole("alert").textContent).toMatch(/DataHub graph request timed out/i);
+    finishRetry?.([value]);
+    expect(await screen.findByRole("heading", { name: /customers governed change/i })).not.toBeNull();
+    expect(listCases).toHaveBeenCalledTimes(2);
+  });
+
+  it("names the canonical prerequisite when DataHub has no governed cases", async () => {
+    const client: WorkspaceClient = {
+      listCases: async () => [], getCase: async () => { throw new Error("not used"); },
+      sync: async () => { throw new Error("not used"); }, reconcile: async () => { throw new Error("not used"); },
+      decide: async () => { throw new Error("not used"); },
+      agentHealth: async () => ({ available: true, provider: "qvac", modelId: "qwen3.6-27b", managed: true }),
+      startAgent: async () => { throw new Error("not used"); }, approveAgent: async () => { throw new Error("not used"); },
+    };
+    render(<App client={client} sessionClient={localSessionClient} initialPath="/workspace" />);
+
+    const empty = await screen.findByRole("status", { name: /governed case empty state/i });
+    expect(empty.textContent).toMatch(/No governed ChangeMarshal cases exist in DataHub/i);
+    expect(empty.textContent).toMatch(/A canonical DataHub change case is required before work can begin/i);
   });
 });

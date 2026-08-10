@@ -6,11 +6,16 @@ import type { ChangeCase } from "../domain/case";
 
 export type ChangeStageStatus = "verified" | "active" | "waiting" | "blocked" | "failed" | "unavailable";
 
-export type ChangeNodeData = Record<string, unknown> & Readonly<{
+type ChangeNodeBaseData = Readonly<{
   label: string;
   eyebrow: string;
   status: ChangeStageStatus;
   detail: string;
+}>;
+
+export type ChangeNodeData = Record<string, unknown> & ChangeNodeBaseData & Readonly<{
+  statusLabel: string;
+  statusIcon: string;
 }>;
 
 export type ChangeNode = Node<ChangeNodeData, "changeStage">;
@@ -18,6 +23,15 @@ export type ChangeEdge = Edge<{ status: ChangeStageStatus }, "smoothstep">;
 
 const width = 210;
 const height = 108;
+
+const statePresentation: Record<ChangeStageStatus, Readonly<{ statusLabel: string; statusIcon: string }>> = {
+  verified: { statusLabel: "Verified", statusIcon: "✓" },
+  active: { statusLabel: "Active", statusIcon: "◆" },
+  waiting: { statusLabel: "Waiting", statusIcon: "◷" },
+  blocked: { statusLabel: "Blocked", statusIcon: "■" },
+  failed: { statusLabel: "Failed", statusIcon: "×" },
+  unavailable: { statusLabel: "Unavailable", statusIcon: "—" },
+};
 
 function everyWork(value: ChangeCase, predicate: (workKey: string) => boolean): boolean {
   return value.workItems.length > 0 && value.workItems.every((work) => predicate(work.workKey));
@@ -37,7 +51,7 @@ function stageNodes(value: ChangeCase, run?: AgentRunSnapshot): ChangeNode[] {
     if (runFailed) return "failed";
     return runningTool === tool ? "active" : fallback;
   };
-  const values: Array<Readonly<{ id: string; data: ChangeNodeData }>> = [
+  const values: Array<Readonly<{ id: string; data: ChangeNodeBaseData }>> = [
     { id: "git", data: { eyebrow: "Immutable scope", label: "Git change", status: "verified", detail: value.revision.headSha.slice(0, 10) } },
     { id: "datahub", data: { eyebrow: "Graph evidence", label: "DataHub impact", status: value.dataHub.verified ? "verified" : "waiting", detail: `${value.evidence.paths.length} lineage path${value.evidence.paths.length === 1 ? "" : "s"}` } },
     { id: "case", data: { eyebrow: "Canonical record", label: "Change case", status: value.evidence.complete ? "verified" : "blocked", detail: value.caseKey.slice(0, 8) } },
@@ -48,7 +62,22 @@ function stageNodes(value: ChangeCase, run?: AgentRunSnapshot): ChangeNode[] {
     { id: "decision", data: { eyebrow: "Policy authority", label: "Merge decision", status: statusFor("publishMergeDecision", value.admission === undefined ? "waiting" : value.admission.allowed ? "verified" : "blocked"), detail: value.admission?.allowed ? "Allowed" : `${value.admission?.blockers.length ?? 1} blocker${value.admission?.blockers.length === 1 ? "" : "s"}` } },
     { id: "resolution", data: { eyebrow: "Institutional memory", label: "DataHub resolution", status: value.dataHub.verified && value.admission !== undefined ? "verified" : "waiting", detail: value.dataHub.verified ? "Reread verified" : "Write-back pending" } },
   ];
-  return values.map(({ id, data }) => ({ id, type: "changeStage", data, position: { x: 0, y: 0 }, sourcePosition: Position.Right, targetPosition: Position.Left, draggable: true, connectable: false, selectable: true, focusable: true, ariaLabel: `${data.label}: ${data.status}. ${data.detail}` }));
+  return values.map(({ id, data }) => {
+    const presentedData: ChangeNodeData = { ...data, ...statePresentation[data.status] };
+    return {
+      id,
+      type: "changeStage" as const,
+      data: presentedData,
+      position: { x: 0, y: 0 },
+      sourcePosition: Position.Right,
+      targetPosition: Position.Left,
+      draggable: true,
+      connectable: false,
+      selectable: true,
+      focusable: true,
+      ariaLabel: `${presentedData.label}: ${presentedData.statusIcon} ${presentedData.statusLabel}. ${presentedData.detail}`,
+    };
+  });
 }
 
 export function projectCaseFlow(value: ChangeCase, run?: AgentRunSnapshot): Readonly<{

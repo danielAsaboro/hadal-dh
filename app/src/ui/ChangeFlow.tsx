@@ -17,7 +17,7 @@ export function ChangeFlow({ value, run }: Readonly<{ value: ChangeCase; run?: A
   const selectNode: NodeMouseHandler<ChangeNode> = (_event, node) => setSelectedId(node.id);
 
   return (
-    <section className="flow-command-center" aria-label="Governed execution graph">
+    <section className="flow-command-center" id="execution-graph" aria-label="Governed execution graph">
       <div className="flow-heading">
         <div><p className="eyebrow">Live coordination map</p><h2>Governed execution graph</h2></div>
         <div className="flow-runtime"><span className={run === undefined ? "runtime-dot idle" : "runtime-dot"} />{run === undefined ? "QVAC agent ready when configured" : `${run.modelId} · ${run.status.replaceAll("_", " ")}`}</div>
@@ -50,7 +50,7 @@ export function ChangeFlow({ value, run }: Readonly<{ value: ChangeCase; run?: A
         </div>
         <aside className="flow-inspector" aria-label="Selected execution evidence">
           <p className="eyebrow">Selected stage</p>
-          <div className="inspector-title"><h3>{selected.data.label}</h3><span className={`flow-state flow-state-${selected.data.status}`}>{selected.data.status}</span></div>
+          <div className="inspector-title"><h3>{selected.data.label}</h3><span className={`flow-state flow-state-${selected.data.status}`}><span aria-hidden="true">{selected.data.statusIcon}</span> {selected.data.statusLabel}</span></div>
           <p>{selected.data.detail}</p>
           <dl>
             <div><dt>Case</dt><dd>{value.caseKey.slice(0, 12)}</dd></div>

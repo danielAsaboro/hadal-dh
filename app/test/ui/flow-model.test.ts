@@ -49,4 +49,18 @@ describe("canonical case execution graph", () => {
     expect(flow.nodes.find(({ id }) => id === "decision")?.data.status).toBe("blocked");
     expect(flow.nodes.find(({ id }) => id === "resolution")?.data.status).toBe("waiting");
   });
+
+  it("pairs every canonical execution state with literal text and icon semantics", () => {
+    const flow = projectCaseFlow(blockedCase());
+    expect(flow.nodes.find(({ id }) => id === "git")?.data).toMatchObject({
+      status: "verified", statusLabel: "Verified", statusIcon: "✓",
+    });
+    expect(flow.nodes.find(({ id }) => id === "approvals")?.data).toMatchObject({
+      status: "waiting", statusLabel: "Waiting", statusIcon: "◷",
+    });
+    expect(flow.nodes.find(({ id }) => id === "decision")?.data).toMatchObject({
+      status: "blocked", statusLabel: "Blocked", statusIcon: "■",
+    });
+    expect(flow.nodes.every(({ ariaLabel, data }) => ariaLabel?.includes(`${data.statusIcon} ${data.statusLabel}`))).toBe(true);
+  });
 });

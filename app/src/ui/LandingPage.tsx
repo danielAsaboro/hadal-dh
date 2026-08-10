@@ -29,6 +29,9 @@ export function LandingPage({ onEnterWorkspace }: LandingPageProps) {
             event.preventDefault();
             onEnterWorkspace();
           }}>Enter governed workspace</a>
+          <figure className="landing-hero-art" aria-label="A graph signal traced through layered dependency contours">
+            <img src="/brand/hadal-graph-hero.png" alt="An abstract dependency graph traced by a calm chartreuse signal." />
+          </figure>
         </section>
 
         <section id="method" aria-labelledby="method-title">

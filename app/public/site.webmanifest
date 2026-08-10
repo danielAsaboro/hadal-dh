@@ -1,0 +1,9 @@
+{
+  "name": "Hadal — Governed change intelligence",
+  "short_name": "Hadal",
+  "description": "Governed change intelligence for data systems.",
+  "theme_color": "#efff68",
+  "background_color": "#f6f5ef",
+  "display": "standalone",
+  "icons": [{ "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

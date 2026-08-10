@@ -3,8 +3,9 @@ import { MarkerType, Position, type Edge, type Node } from "@xyflow/react";
 
 import type { AgentRunSnapshot } from "../ai/run-events";
 import type { ChangeCase } from "../domain/case";
+import { statusPresentation, type OperationalStatus } from "./StatusIndicator";
 
-export type ChangeStageStatus = "verified" | "active" | "waiting" | "blocked" | "failed" | "unavailable";
+export type ChangeStageStatus = OperationalStatus;
 
 type ChangeNodeBaseData = Readonly<{
   label: string;
@@ -23,15 +24,6 @@ export type ChangeEdge = Edge<{ status: ChangeStageStatus }, "smoothstep">;
 
 const width = 210;
 const height = 108;
-
-const statePresentation: Record<ChangeStageStatus, Readonly<{ statusLabel: string; statusIcon: string }>> = {
-  verified: { statusLabel: "Verified", statusIcon: "✓" },
-  active: { statusLabel: "Active", statusIcon: "◆" },
-  waiting: { statusLabel: "Waiting", statusIcon: "◷" },
-  blocked: { statusLabel: "Blocked", statusIcon: "■" },
-  failed: { statusLabel: "Failed", statusIcon: "×" },
-  unavailable: { statusLabel: "Unavailable", statusIcon: "—" },
-};
 
 function everyWork(value: ChangeCase, predicate: (workKey: string) => boolean): boolean {
   return value.workItems.length > 0 && value.workItems.every((work) => predicate(work.workKey));
@@ -63,7 +55,7 @@ function stageNodes(value: ChangeCase, run?: AgentRunSnapshot): ChangeNode[] {
     { id: "resolution", data: { eyebrow: "Institutional memory", label: "DataHub resolution", status: value.dataHub.verified && value.admission !== undefined ? "verified" : "waiting", detail: value.dataHub.verified ? "Reread verified" : "Write-back pending" } },
   ];
   return values.map(({ id, data }) => {
-    const presentedData: ChangeNodeData = { ...data, ...statePresentation[data.status] };
+    const presentedData: ChangeNodeData = { ...data, ...statusPresentation(data.status) };
     return {
       id,
       type: "changeStage" as const,

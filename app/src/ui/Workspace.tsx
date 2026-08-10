@@ -90,7 +90,9 @@ export function Workspace({ client = httpWorkspaceClient }: { readonly client?: 
 
   useEffect(() => {
     let active = true;
-    setAgentHealth({ status: "checking" });
+    setAgentHealth((existing) => existing.status === "unavailable"
+      ? { status: "checking", previousFailure: existing.message }
+      : { status: "checking" });
     void client.agentHealth().then((value) => {
       if (active) setAgentHealth({ status: "available", value });
     }).catch((caught: unknown) => {
@@ -143,7 +145,8 @@ export function Workspace({ client = httpWorkspaceClient }: { readonly client?: 
 
   const resolveAgentApproval = async (approved: boolean) => {
     const pending = agentRun?.pendingApproval;
-    if (current === undefined || agentRun === undefined || pending === undefined) return;
+    const runCase = agentRun === undefined ? undefined : cases.find((item) => item.caseKey === agentRun.caseKey);
+    if (agentRun === undefined || pending === undefined || runCase === undefined) return;
     setBusy("agent-approval");
     setError(undefined);
     try {
@@ -153,7 +156,9 @@ export function Workspace({ client = httpWorkspaceClient }: { readonly client?: 
         approved,
         approved ? "Approved in ChangeMarshal command center" : "Denied in ChangeMarshal command center",
       ));
-      setCurrent(await client.getCase(current.caseKey));
+      const reread = await client.getCase(runCase.caseKey);
+      setCases((existing) => existing.map((item) => item.caseKey === reread.caseKey ? reread : item));
+      setCurrent((selected) => selected?.caseKey === reread.caseKey ? reread : selected);
     } catch (caught) {
       setError(messageFrom(caught, "Agent approval did not complete"));
     } finally {
@@ -188,6 +193,9 @@ export function Workspace({ client = httpWorkspaceClient }: { readonly client?: 
     );
   }
 
+  const runCase = agentRun === undefined ? undefined : cases.find((item) => item.caseKey === agentRun.caseKey);
+  const visibleRun = runCase === undefined ? undefined : agentRun;
+
   return (
     <div className="workspace-shell">
       <CaseRail cases={cases} current={current} disabled={busy !== undefined} onSelect={(caseKey) => void selectCase(caseKey)} />
@@ -218,16 +226,16 @@ export function Workspace({ client = httpWorkspaceClient }: { readonly client?: 
         </section>
 
         <GovernedAgentPanel
-          value={current}
+          value={runCase ?? current}
           health={agentHealth}
-          {...(agentRun === undefined ? {} : { run: agentRun })}
+          {...(visibleRun === undefined ? {} : { run: visibleRun })}
           {...(busy === undefined ? {} : { busy })}
           onRun={(prompt) => void coordinate(prompt)}
           onResolveApproval={(approved) => void resolveAgentApproval(approved)}
           onRetryHealth={() => setHealthKey((value) => value + 1)}
         />
 
-        <ChangeFlow value={current} {...(agentRun === undefined ? {} : { run: agentRun })} />
+        <ChangeFlow value={current} {...(visibleRun?.caseKey === current.caseKey ? { run: visibleRun } : {})} />
         <CaseSections value={current} />
       </main>
     </div>

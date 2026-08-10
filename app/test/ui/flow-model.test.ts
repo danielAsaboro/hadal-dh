@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import type { AgentRunSnapshot } from "../../src/ai/run-events";
 import type { ChangeCase, ImpactEvidence } from "../../src/domain/case";
 import { compileCase } from "../../src/domain/compile-case";
 import { projectCaseFlow } from "../../src/ui/flow-model";
@@ -50,7 +51,7 @@ describe("canonical case execution graph", () => {
     expect(flow.nodes.find(({ id }) => id === "resolution")?.data.status).toBe("waiting");
   });
 
-  it("pairs every canonical execution state with literal text and icon semantics", () => {
+  it("pairs projected canonical states with literal text and icon semantics", () => {
     const flow = projectCaseFlow(blockedCase());
     expect(flow.nodes.find(({ id }) => id === "git")?.data).toMatchObject({
       status: "verified", statusLabel: "Verified", statusIcon: "✓",
@@ -62,5 +63,30 @@ describe("canonical case execution graph", () => {
       status: "blocked", statusLabel: "Blocked", statusIcon: "■",
     });
     expect(flow.nodes.every(({ ariaLabel, data }) => ariaLabel?.includes(`${data.statusIcon} ${data.statusLabel}`))).toBe(true);
+  });
+
+  it("derives active and failed stages from run facts without inventing unavailable stages", () => {
+    const value = blockedCase();
+    const active: AgentRunSnapshot = {
+      runId: "run-active", caseKey: value.caseKey, headSha: value.revision.headSha,
+      modelId: "qwen3.6-27b", status: "running",
+      events: [
+        { kind: "run_started", sequence: 1, at: "2026-08-09T15:00:00.000Z", summary: "Governed run started" },
+        { kind: "tool_started", sequence: 2, at: "2026-08-09T15:00:01.000Z", summary: "Remediation started", toolName: "generateRemediation", toolCallId: "call-active" },
+      ],
+    };
+    const failed: AgentRunSnapshot = {
+      ...active,
+      runId: "run-failed",
+      status: "failed",
+      events: [
+        { kind: "run_started", sequence: 1, at: "2026-08-09T15:00:00.000Z", summary: "Governed run started" },
+        { kind: "run_failed", sequence: 2, at: "2026-08-09T15:00:01.000Z", summary: "Governed run failed" },
+      ],
+    };
+
+    expect(projectCaseFlow(value, active).nodes.find(({ id }) => id === "remediation")?.data.status).toBe("active");
+    expect(projectCaseFlow(value, failed).nodes.find(({ id }) => id === "decision")?.data.status).toBe("failed");
+    expect(projectCaseFlow(value).nodes.some(({ data }) => data.status === "unavailable")).toBe(false);
   });
 });

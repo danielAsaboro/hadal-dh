@@ -5,6 +5,7 @@ import type { AgentRunSnapshot } from "../ai/run-events";
 import type { ChangeCase } from "../domain/case";
 import { FlowNode } from "./FlowNode";
 import { projectCaseFlow, type ChangeNode } from "./flow-model";
+import { StatusIndicator } from "./StatusIndicator";
 
 const nodeTypes = { changeStage: FlowNode };
 
@@ -50,7 +51,7 @@ export function ChangeFlow({ value, run }: Readonly<{ value: ChangeCase; run?: A
         </div>
         <aside className="flow-inspector" aria-label="Selected execution evidence">
           <p className="eyebrow">Selected stage</p>
-          <div className="inspector-title"><h3>{selected.data.label}</h3><span className={`flow-state flow-state-${selected.data.status}`}><span aria-hidden="true">{selected.data.statusIcon}</span> {selected.data.statusLabel}</span></div>
+          <div className="inspector-title"><h3>{selected.data.label}</h3><StatusIndicator status={selected.data.status} /></div>
           <p>{selected.data.detail}</p>
           <dl>
             <div><dt>Case</dt><dd>{value.caseKey.slice(0, 12)}</dd></div>

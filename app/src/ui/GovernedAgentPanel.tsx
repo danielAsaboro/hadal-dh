@@ -2,10 +2,11 @@ import { useState } from "react";
 
 import type { AgentRunSnapshot } from "../ai/run-events";
 import type { ChangeCase } from "../domain/case";
+import { StatusIndicator } from "./StatusIndicator";
 
 export type AgentHealth = Readonly<{ available: true; provider: "qvac"; modelId: string; managed: boolean }>;
 export type AgentHealthState =
-  | Readonly<{ status: "checking" }>
+  | Readonly<{ status: "checking"; previousFailure?: string }>
   | Readonly<{ status: "available"; value: AgentHealth }>
   | Readonly<{ status: "unavailable"; message: string }>;
 
@@ -36,10 +37,17 @@ export function GovernedAgentPanel({
     <section className="agent-console" aria-label="QVAC coordination controls">
       <div className="agent-console-copy">
         <p className="eyebrow">Local AI · governed tools</p>
-        {health.status === "available" && <h2>{health.value.modelId} coordinator</h2>}
-        {health.status === "checking" && <div role="status" aria-label="QVAC integration status"><h2>Checking QVAC runtime…</h2></div>}
+        {health.status === "available" && <div className="integration-heading"><StatusIndicator status="verified" /><h2>{health.value.modelId} coordinator</h2></div>}
+        {health.status === "checking" && (
+          <div role="status" aria-label="QVAC integration status">
+            <StatusIndicator status="active" />
+            <h2>{health.previousFailure === undefined ? "Checking QVAC runtime…" : "QVAC health retry in progress…"}</h2>
+            {health.previousFailure !== undefined && <p>Unavailable. {health.previousFailure}. The known failure remains in effect until this retry succeeds.</p>}
+          </div>
+        )}
         {health.status === "unavailable" && (
           <div role="status" aria-label="QVAC integration status">
+            <StatusIndicator status="unavailable" />
             <h2>QVAC runtime unavailable</h2>
             <p>Unavailable. {health.message}. Coordination remains disabled until a verified health check succeeds.</p>
             <button disabled={busy !== undefined} onClick={onRetryHealth}>Retry QVAC health check</button>

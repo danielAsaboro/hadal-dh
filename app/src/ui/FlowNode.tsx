@@ -2,6 +2,7 @@ import { memo } from "react";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 
 import type { ChangeNode } from "./flow-model";
+import { StatusIndicator } from "./StatusIndicator";
 
 export const FlowNode = memo(function FlowNode({ data, selected }: NodeProps<ChangeNode>) {
   return (
@@ -10,7 +11,7 @@ export const FlowNode = memo(function FlowNode({ data, selected }: NodeProps<Cha
       <div className="flow-node-top"><span>{data.eyebrow}</span><i aria-hidden="true" /></div>
       <strong>{data.label}</strong>
       <small>{data.detail}</small>
-      <span className={`flow-state flow-state-${data.status}`}><span aria-hidden="true">{data.statusIcon}</span> {data.statusLabel}</span>
+      <StatusIndicator status={data.status} />
       <Handle type="source" position={Position.Right} isConnectable={false} />
     </article>
   );

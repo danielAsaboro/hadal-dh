@@ -6,6 +6,7 @@ import type { AgentRunSnapshot } from "../../src/ai/run-events";
 import type { ChangeCase, ImpactEvidence } from "../../src/domain/case";
 import { compileCase } from "../../src/domain/compile-case";
 import { App, type WorkspaceClient } from "../../src/ui/App";
+import { StatusIndicator, type OperationalStatus } from "../../src/ui/StatusIndicator";
 
 class TestResizeObserver implements ResizeObserver {
   readonly observe = () => undefined;
@@ -24,32 +25,55 @@ const localSessionClient = {
   signOut: async () => undefined,
 };
 
-function caseValue(): ChangeCase {
-  const source = "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.customers,PROD)";
-  const consumer = "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.orders,PROD)";
+function caseValue(options: Readonly<{
+  repository?: string;
+  modelName?: string;
+  consumerName?: string;
+  headSha?: string;
+}> = {}): ChangeCase {
+  const repository = options.repository ?? "acme/warehouse";
+  const modelName = options.modelName ?? "customers";
+  const consumerName = options.consumerName ?? "orders";
+  const headSha = options.headSha ?? "head";
+  const source = `urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.${modelName},PROD)`;
+  const consumer = `urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.${consumerName},PROD)`;
   const evidence: ImpactEvidence = {
     complete: true,
-    source: { urn: source, type: "dataset", name: "customers" }, schemaFields: ["email"],
+    source: { urn: source, type: "dataset", name: modelName }, schemaFields: ["email"],
     paths: [{ sourceUrn: source, downstreamUrn: consumer, column: "email", downstreamColumns: ["email"], nodes: [source, consumer] }],
     assets: [
-      { urn: source, type: "dataset", name: "customers", owners: ["urn:li:corpuser:producer"], tags: ["urn:li:tag:PII"], glossaryTerms: [], incidentStatuses: [], assertions: [], queries: [], complete: true },
-      { urn: consumer, type: "dataset", name: "orders", owners: ["urn:li:corpuser:consumer"], tags: [], glossaryTerms: [], incidentStatuses: ["WARN"], assertions: [], queries: [], complete: true },
+      { urn: source, type: "dataset", name: modelName, owners: ["urn:li:corpuser:producer"], tags: ["urn:li:tag:PII"], glossaryTerms: [], incidentStatuses: [], assertions: [], queries: [], complete: true },
+      { urn: consumer, type: "dataset", name: consumerName, owners: ["urn:li:corpuser:consumer"], tags: [], glossaryTerms: [], incidentStatuses: ["WARN"], assertions: [], queries: [], complete: true },
     ],
   };
   const value = compileCase(evidence, {
-    repository: "acme/warehouse", baseSha: "base", headSha: "head", observedAt: "2026-08-09T10:00:00.000Z",
-    change: { kind: "dbt_column_rename", modelName: "customers", oldName: "email", newName: "email_address", sourcePath: "models/schema.yml" },
+    repository, baseSha: "base", headSha, observedAt: "2026-08-09T10:00:00.000Z",
+    change: { kind: "dbt_column_rename", modelName, oldName: "email", newName: "email_address", sourcePath: `models/${modelName}.yml` },
   });
   const work = value.workItems[0]!;
   return {
     ...value,
-    admission: { allowed: false, blockers: ["OWNER_MAPPING_MISSING:urn:li:corpuser:producer"], revisionKey: value.revision.revisionKey, headSha: "head", evaluatedAt: "2026-08-09T10:01:00.000Z" },
+    admission: { allowed: false, blockers: ["OWNER_MAPPING_MISSING:urn:li:corpuser:producer"], revisionKey: value.revision.revisionKey, headSha, evaluatedAt: "2026-08-09T10:01:00.000Z" },
     externalProjections: [{
       system: "github", workKey: work.workKey, externalId: "1",
-      url: "https://github.com/acme/warehouse/issues/1", state: "verified",
-      revisionKey: value.revision.revisionKey, headSha: "head", assignee: "producer-gh",
+      url: `https://github.com/${repository}/issues/1`, state: "verified",
+      revisionKey: value.revision.revisionKey, headSha, assignee: "producer-gh",
       verifiedAt: "2026-08-09T10:02:00.000Z",
     }],
+  };
+}
+
+function clientFor(value: ChangeCase, overrides: Partial<WorkspaceClient> = {}): WorkspaceClient {
+  return {
+    listCases: async () => [value],
+    getCase: async () => value,
+    sync: async () => value,
+    reconcile: async () => value,
+    decide: async () => value,
+    agentHealth: async () => ({ available: true, provider: "qvac", modelId: "qwen3.6-27b", managed: true }),
+    startAgent: async () => { throw new Error("not used"); },
+    approveAgent: async () => { throw new Error("not used"); },
+    ...overrides,
   };
 }
 
@@ -316,6 +340,37 @@ describe("ChangeMarshal coordination workspace", () => {
       .toBe("https://github.com/acme/warehouse/issues/1");
   });
 
+  it.each([
+    ["verified", "Verified", "✓"],
+    ["waiting", "Waiting", "◷"],
+    ["blocked", "Blocked", "■"],
+    ["active", "Active", "◆"],
+    ["failed", "Failed", "×"],
+    ["unavailable", "Unavailable", "—"],
+  ] satisfies readonly (readonly [OperationalStatus, string, string])[])(
+    "renders %s with literal text and a non-color icon",
+    (status, label, icon) => {
+      render(<StatusIndicator status={status} />);
+
+      const indicator = screen.getByRole("img", { name: `${label} status` });
+      expect(indicator.textContent).toContain(label);
+      expect(indicator.textContent).toContain(icon);
+    },
+  );
+
+  it("renders unavailable as a QVAC integration indicator without changing canonical flow stages", async () => {
+    const value = caseValue();
+    render(<App
+      client={clientFor(value, { agentHealth: async () => { throw new Error("QVAC endpoint offline"); } })}
+      sessionClient={localSessionClient}
+      initialPath="/workspace"
+    />);
+
+    await screen.findByRole("status", { name: /QVAC integration status/i });
+    expect(screen.getByRole("img", { name: "Unavailable status" })).not.toBeNull();
+    expect(screen.queryByLabelText(/DataHub impact:.*Unavailable/i)).toBeNull();
+  });
+
   it("runs a QVAC coordinator and requires an explicit browser approval for mutations", async () => {
     const value = caseValue();
     const pending: AgentRunSnapshot = {
@@ -384,11 +439,55 @@ describe("ChangeMarshal coordination workspace", () => {
     ));
   });
 
+  it("keeps approval scope and reread bound to run case A after selecting case B", async () => {
+    const caseA = caseValue();
+    const caseB = caseValue({
+      repository: "acme/marketing",
+      modelName: "campaigns",
+      consumerName: "attribution",
+      headSha: "campaign-head",
+    });
+    const pending: AgentRunSnapshot = {
+      runId: "run-case-a", caseKey: caseA.caseKey, headSha: caseA.revision.headSha.padEnd(40, "c").slice(0, 40),
+      modelId: "qwen3.6-27b", status: "waiting_for_approval",
+      events: [{ kind: "approval_required", sequence: 1, at: "2026-08-09T15:00:00.000Z", summary: "Approval required for generateRemediation", toolName: "generateRemediation", toolCallId: "call-case-a", approvalId: "approval-case-a", argumentsHash: "c".repeat(64) }],
+      pendingApproval: { token: "token-case-a", approvalId: "approval-case-a", toolCallId: "call-case-a", toolName: "generateRemediation", argumentsHash: "c".repeat(64), requestedAt: "2026-08-09T15:00:00.000Z", expiresAt: "2026-08-09T15:15:00.000Z" },
+    };
+    const getCase = vi.fn(async (caseKey: string) => caseKey === caseA.caseKey ? caseA : caseB);
+    const client: WorkspaceClient = {
+      listCases: async () => [caseA, caseB], getCase, sync: async () => caseA,
+      reconcile: async () => caseA, decide: async () => caseA,
+      agentHealth: async () => ({ available: true, provider: "qvac", modelId: "qwen3.6-27b", managed: true }),
+      startAgent: async () => pending,
+      approveAgent: async () => ({ ...pending, status: "completed", pendingApproval: undefined }),
+    };
+    render(<App client={client} sessionClient={localSessionClient} initialPath="/workspace" />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /Run QVAC coordinator/i }));
+    await screen.findByRole("group", { name: /Approval required for generateRemediation/i });
+    fireEvent.click(screen.getByRole("button", { name: /campaigns/i }));
+    await screen.findByRole("heading", { name: /campaigns governed change/i });
+
+    const gate = screen.getByRole("group", { name: /Approval required for generateRemediation/i });
+    expect(gate.textContent).toContain(caseA.caseKey);
+    expect(gate.textContent).toContain(caseA.repository);
+    expect(gate.textContent).toContain(pending.headSha);
+    expect(gate.textContent).not.toContain(caseB.repository);
+
+    fireEvent.click(within(gate).getByRole("button", { name: /Approve generateRemediation/i }));
+    await waitFor(() => expect(getCase).toHaveBeenLastCalledWith(caseA.caseKey));
+    expect(screen.getByRole("heading", { name: /campaigns governed change/i })).not.toBeNull();
+  });
+
   it("explains an unavailable QVAC integration and retries its real health check", async () => {
     const value = caseValue();
+    let finishHealthRetry: ((health: Awaited<ReturnType<WorkspaceClient["agentHealth"]>>) => void) | undefined;
+    const healthRetry = new Promise<Awaited<ReturnType<WorkspaceClient["agentHealth"]>>>((resolve) => {
+      finishHealthRetry = resolve;
+    });
     const agentHealth = vi.fn()
       .mockRejectedValueOnce(new Error("QVAC endpoint offline"))
-      .mockResolvedValueOnce({ available: true, provider: "qvac", modelId: "qwen3.6-27b", managed: true });
+      .mockReturnValueOnce(healthRetry);
     const client: WorkspaceClient = {
       listCases: async () => [value], getCase: async () => value, sync: async () => value,
       reconcile: async () => value, decide: async () => value, agentHealth,
@@ -403,6 +502,9 @@ describe("ChangeMarshal coordination workspace", () => {
     expect(screen.getByRole("button", { name: /Retry QVAC health check/i })).not.toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: /Retry QVAC health check/i }));
+    await waitFor(() => expect(screen.getByRole("status", { name: /QVAC integration status/i }).textContent)
+      .toMatch(/retry in progress.*QVAC endpoint offline/i));
+    finishHealthRetry?.({ available: true, provider: "qvac", modelId: "qwen3.6-27b", managed: true });
     expect(await screen.findByRole("heading", { name: /qwen3.6-27b coordinator/i })).not.toBeNull();
     expect(agentHealth).toHaveBeenCalledTimes(2);
   });

@@ -12,6 +12,7 @@ import { resolveRevision } from "../git/repository";
 import { generateCompatibilityMigration } from "../remediation/generate";
 import { validateRemediation } from "../remediation/validate";
 import { writeRemediationArtifacts } from "../remediation/write";
+import { registerUiStaticRoutes } from "../ui/static-routes";
 import { runValidation, ValidationRunnerError } from "../validation/runner";
 import { registerSessionRoutes, requireSession, type UiSessionConfig } from "./session";
 
@@ -32,6 +33,7 @@ export interface ServerDependencies {
   readonly agent?: AgentRunApplication;
   readonly agentScope?: Readonly<{ repository: string; baseRef: string; headRef: string }>;
   readonly session?: UiSessionConfig;
+  readonly uiRoot?: string;
 }
 
 export interface AgentRunApplication {
@@ -79,6 +81,7 @@ export function createServer(dependencies: ServerDependencies): FastifyInstance 
     const message = error instanceof Error ? error.message : "unknown server error";
     void reply.status(status).send({ error: name, message });
   });
+  if (dependencies.uiRoot !== undefined) registerUiStaticRoutes(server, dependencies.uiRoot);
   registerSessionRoutes(server, dependencies.session);
   server.addHook("onRequest", async (request, reply) => {
     const pathname = request.url.split("?", 1)[0] ?? "";

@@ -1,8 +1,6 @@
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import fastifyStatic from "@fastify/static";
-
 import { createAgentOperations } from "../ai/operations";
 import { createChangeMarshalAgent } from "../ai/orchestrator";
 import { createQvacModel, type QvacModelHandle } from "../ai/qvac";
@@ -80,15 +78,15 @@ if (productEnv(process.env, "AGENT_ENABLED") === "1") {
     throw error;
   }
 }
+const distribution = resolve(fileURLToPath(new URL("../../dist", import.meta.url)));
 const server = createServer({
   application: service,
   repoRoot: repositoryRoot,
   github: connector,
+  uiRoot: distribution,
   ...(session === undefined ? {} : { session }),
   ...(agentRun === undefined || agentScope === undefined ? {} : { agent: agentRun, agentScope }),
 });
-const distribution = resolve(fileURLToPath(new URL("../../dist", import.meta.url)));
-await server.register(fastifyStatic, { root: distribution, wildcard: false });
 server.addHook("onClose", async () => {
   if (qvac !== undefined) await qvac.close();
   await dataHub.close();

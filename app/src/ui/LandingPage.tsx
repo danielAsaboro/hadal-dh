@@ -25,6 +25,7 @@ export function LandingPage({ onEnterWorkspace }: LandingPageProps) {
             coordinates the work it requires, validates the outcome, and writes durable resolution back.
           </p>
           <a href="/workspace" onClick={(event) => {
+            if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
             event.preventDefault();
             onEnterWorkspace();
           }}>Enter governed workspace</a>

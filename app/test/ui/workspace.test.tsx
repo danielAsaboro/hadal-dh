@@ -99,6 +99,46 @@ describe("ChangeMarshal coordination workspace", () => {
     expect(listCases).toHaveBeenCalledTimes(1);
   });
 
+  it.each([
+    ["Control-click", { ctrlKey: true }],
+    ["Command-click", { metaKey: true }],
+    ["Shift-click", { shiftKey: true }],
+    ["Alt-click", { altKey: true }],
+    ["middle-click", { button: 1 }],
+  ] satisfies readonly (readonly [string, MouseEventInit])[])("preserves native %s workspace link behavior", (_label, click) => {
+    const value = caseValue();
+    const listCases = vi.fn(async () => [value]);
+    const read = vi.fn(async () => ({ configured: false, authenticated: true }));
+    const client: WorkspaceClient = {
+      listCases, getCase: async () => value, sync: async () => value,
+      reconcile: async () => value, decide: async () => value,
+      agentHealth: async () => ({ available: true, provider: "qvac", modelId: "qwen3.6-27b", managed: true }),
+      startAgent: async () => { throw new Error("not used"); },
+      approveAgent: async () => { throw new Error("not used"); },
+    };
+    let preventedByApplication: boolean | undefined;
+    const stopJsdomNavigation = (event: Event) => {
+      preventedByApplication = event.defaultPrevented;
+      event.preventDefault();
+    };
+    window.addEventListener("click", stopJsdomNavigation);
+
+    try {
+      render(<App client={client} sessionClient={{ ...localSessionClient, read }} initialPath="/" />);
+      const link = screen.getByRole("link", { name: /enter governed workspace/i });
+
+      fireEvent.click(link, click);
+
+      expect(link.getAttribute("href")).toBe("/workspace");
+      expect(preventedByApplication).toBe(false);
+      expect(window.location.pathname).toBe("/");
+      expect(read).not.toHaveBeenCalled();
+      expect(listCases).not.toHaveBeenCalled();
+    } finally {
+      window.removeEventListener("click", stopJsdomNavigation);
+    }
+  });
+
   it("responds to browser history navigation", async () => {
     const value = caseValue();
     const listCases = vi.fn(async () => [value]);
@@ -138,6 +178,25 @@ describe("ChangeMarshal coordination workspace", () => {
     const passphrase = screen.getByLabelText(/operator passphrase/i);
     expect(passphrase.getAttribute("type")).toBe("password");
     expect(screen.getByRole("button", { name: /sign in to workspace/i })).not.toBeNull();
+    expect(listCases).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when an unconfigured session is reported unauthenticated", async () => {
+    const value = caseValue();
+    const listCases = vi.fn(async () => [value]);
+    const client: WorkspaceClient = {
+      listCases, getCase: async () => value, sync: async () => value,
+      reconcile: async () => value, decide: async () => value,
+      agentHealth: async () => ({ available: true, provider: "qvac", modelId: "qwen3.6-27b", managed: true }),
+      startAgent: async () => { throw new Error("not used"); },
+      approveAgent: async () => { throw new Error("not used"); },
+    };
+    const sessionClient = { ...localSessionClient, read: async () => ({ configured: false, authenticated: false }) };
+
+    render(<App client={client} sessionClient={sessionClient} initialPath="/workspace" />);
+
+    expect(await screen.findByRole("alert")).not.toBeNull();
+    expect(screen.getByText(/session verification failed/i)).not.toBeNull();
     expect(listCases).not.toHaveBeenCalled();
   });
 

@@ -344,6 +344,9 @@ function WorkspaceGate({ client, sessionClient }: {
       }}
     />;
   }
+  if (!session.authenticated) {
+    return <main className="center-state"><p role="alert">Session verification failed. Unauthenticated local access was rejected.</p></main>;
+  }
   return (
     <>
       {!session.configured && <p className="local-session-label" role="status">Local operator session · authentication not configured</p>}

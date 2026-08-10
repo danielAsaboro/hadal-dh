@@ -17,6 +17,9 @@ function sessionState(value: unknown): SessionState {
   if (typeof candidate.configured !== "boolean" || typeof candidate.authenticated !== "boolean") {
     throw new Error("Session endpoint returned an invalid response");
   }
+  if (!candidate.configured && !candidate.authenticated) {
+    throw new Error("Session endpoint returned an unauthenticated local state");
+  }
   return { configured: candidate.configured, authenticated: candidate.authenticated };
 }
 

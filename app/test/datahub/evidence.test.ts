@@ -275,6 +275,30 @@ describe("DataHub evidence collection", () => {
     expect(evidence.assets.filter((asset) => asset.type === "dataset").every((asset) => asset.queries.length === 0)).toBe(true);
   });
 
+  it("reads every bounded search page before resolving an exact dataset", async () => {
+    const replies = { ...completeReplies() } as Record<string, readonly Reply[]>;
+    const source = (replies.search?.[0] as { searchResults: readonly unknown[] }).searchResults[0];
+    const unrelated = Array.from({ length: 10 }, (_, index) => ({
+      entity: entity(
+        `urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.customer_${index},PROD)`,
+        "dataset",
+        `analytics.customer_${index}`,
+        "urn:li:corpuser:other",
+      ),
+    }));
+    replies.search = [
+      { start: 0, count: 10, total: 11, searchResults: [source, ...unrelated.slice(0, 9)] },
+      { start: 10, count: 10, total: 11, searchResults: unrelated.slice(9) },
+    ];
+    const tools = new CapturedToolResults(replies);
+
+    const evidence = await collectEvidence(tools, change, 3);
+
+    expect(evidence.source.urn).toBe(sourceUrn);
+    expect(tools.calls.filter(([name]) => name === "search").map(([, input]) => input.offset))
+      .toEqual([0, 10]);
+  });
+
   it("rejects ambiguous exact-name resolution", async () => {
     const replies = completeReplies();
     const source = (replies.search?.[0] as Record<string, unknown>);

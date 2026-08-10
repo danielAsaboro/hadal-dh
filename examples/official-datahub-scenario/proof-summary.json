@@ -1,0 +1,43 @@
+{
+  "verifiedAt": "2026-08-10T14:56:08.300Z",
+  "dataHubCore": {
+    "version": "v1.6.0",
+    "commit": "059a36c0b035a6057de00114ccac0ea9003d6bc2"
+  },
+  "dataHubCli": "1.6.0.6",
+  "dataHubMcpServer": "0.6.0",
+  "officialSource": {
+    "repository": "datahub-project/static-assets",
+    "datasetCommit": "edbfb6dafd95fc401d90b104776eb790077c4478",
+    "platformInstance": "nyc_taxi_pipeline"
+  },
+  "observedSourceData": {
+    "rawTrips": { "rows": 250000, "maxDate": "2016-03-10" },
+    "stagingTrips": { "rows": 208675, "maxDate": "2016-03-01" },
+    "martDailySummary": { "rows": 41, "maxDate": "2016-03-01", "zeroTripDays": 0 },
+    "discrepancy": "The committed database does not match the README's intended three-day lag and one zero-trip mart day."
+  },
+  "dataHubEvidence": {
+    "datasetsResolved": 5,
+    "rawSchemaFields": 19,
+    "downstreamLineageResults": 4,
+    "exactRawToMartPaths": 1,
+    "queryEntities": 0,
+    "urns": [
+      "urn:li:dataset:(urn:li:dataPlatform:sqlite,nyc_taxi_pipeline.main.raw_trips,PROD)",
+      "urn:li:dataset:(urn:li:dataPlatform:sqlite,nyc_taxi_pipeline.main.staging_trips,PROD)",
+      "urn:li:dataset:(urn:li:dataPlatform:sqlite,nyc_taxi_pipeline.main.mart_daily_summary,PROD)"
+    ]
+  },
+  "durableWriteback": {
+    "urn": "urn:li:document:changemarshal-official-nyc-taxi-resource-coverage-v1",
+    "firstRereadMatches": 1,
+    "secondSaveUsedSameUrn": true,
+    "secondRereadMatches": 1
+  },
+  "limitations": [
+    "The official NYC Taxi metadata contains no DataHub query entities.",
+    "The official MCP server did not advertise the Cloud-only dataset assertion tool on OSS.",
+    "This is a governed evidence and write-back lane, not a substitute for the primary dbt rename case."
+  ]
+}

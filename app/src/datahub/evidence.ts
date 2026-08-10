@@ -59,22 +59,45 @@ async function resolveSource(
   tools: DataHubToolCaller,
   modelName: string,
 ): Promise<Asset> {
-  const response = record(await tools.callTool("search", {
-    query: `/q ${modelName}`,
-    filter: "entity_type = dataset",
-    num_results: 10,
-    offset: 0,
-  }), "search response");
-  const results = array(response.searchResults, "search results");
-  const total = integer(response.total, "search total");
-  const start = response.start === undefined ? 0 : integer(response.start, "search start");
-  if (start !== 0 || total !== results.length) {
-    throw new DataHubEvidenceError("DataHub asset search results are incomplete");
-  }
+  const pageSize = 10;
+  const maxResults = 100;
+  const results: unknown[] = [];
+  let offset = 0;
+  let expectedTotal: number | undefined;
+  do {
+    const response = record(await tools.callTool("search", {
+      query: `/q ${modelName}`,
+      filter: "entity_type = dataset",
+      num_results: pageSize,
+      offset,
+    }), "search response");
+    const page = array(response.searchResults, "search results");
+    const total = integer(response.total, "search total");
+    const start = response.start === undefined ? 0 : integer(response.start, "search start");
+    expectedTotal ??= total;
+    if (
+      start !== offset
+      || total !== expectedTotal
+      || total > maxResults
+      || page.length > pageSize
+      || offset + page.length > total
+      || (page.length === 0 && offset < total)
+    ) {
+      throw new DataHubEvidenceError("DataHub asset search results are incomplete");
+    }
+    results.push(...page);
+    offset += page.length;
+  } while (offset < (expectedTotal ?? 0));
+
   const candidates = new Map<string, Asset>();
+  const returnedUrns = new Set<string>();
   for (const result of results) {
     const entity = record(record(result, "search result").entity, "search entity");
     const asset = assetFromEntity(entity);
+    if (returnedUrns.has(asset.urn)) {
+      throw new DataHubEvidenceError("DataHub asset search results are incomplete");
+    }
+    returnedUrns.add(asset.urn);
     if (asset.type === "dataset" && logicalDatasetName(entity) === modelName.toLowerCase()) {
       candidates.set(asset.urn, asset);
     }

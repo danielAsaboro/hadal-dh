@@ -46,3 +46,17 @@ licenses and notices remain present after `npm ci`.
 
 The QVAC model artifact is downloaded at runtime from the exact registry source
 declared by the installed provider and is not distributed with ChangeMarshal.
+
+## Official DataHub resource evidence
+
+The public examples contain only ChangeMarshal's sanitized observations and
+real DataHub URNs; they do not redistribute the official databases, agent
+packages, or repository source.
+
+- DataHub Core and CLI, Apache-2.0 — https://github.com/datahub-project/datahub
+- DataHub MCP Server, Apache-2.0 — https://github.com/acryldata/mcp-server-datahub
+- DataHub Skills, Apache-2.0 — https://github.com/datahub-project/datahub-skills
+- Analytics Agent, Apache-2.0 — https://github.com/acryldata/analytics-agent
+- NYC Taxi static-assets dataset, official source notes identify the underlying
+  NYC Open Data records as public domain —
+  https://github.com/datahub-project/static-assets/tree/main/datasets/nyc-taxi

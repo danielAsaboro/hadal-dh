@@ -349,7 +349,7 @@ code, .sha, dd { font-family: "SFMono-Regular", Consolas, "Liberation Mono", mon
 }
 .case-rail .brand-lockup { padding: 0 6px; }
 .case-rail .rail-label { margin: 54px 10px 12px; color: #8e968a; }
-.case-rail nav { display: grid; gap: 7px; }
+.case-rail nav { display: grid; min-height: 0; overflow-y: auto; gap: 7px; overscroll-behavior: contain; }
 .case-link {
   display: flex;
   width: 100%;
@@ -389,6 +389,19 @@ code, .sha, dd { font-family: "SFMono-Regular", Consolas, "Liberation Mono", mon
   border-radius: 50%;
   font-size: 11px;
 }
+.rail-session { display: grid; gap: 8px; padding: 8px 10px 0; }
+.rail-session p { margin: 0; color: #ffb3a7; font-size: 10px; line-height: 1.45; overflow-wrap: anywhere; }
+.rail-sign-out {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid #697166;
+  border-radius: 10px;
+  background: #292d27;
+  color: var(--chalk);
+  font-size: 11px;
+  font-weight: 780;
+}
+.rail-sign-out:hover:not(:disabled) { border-color: var(--chalk); }
 
 .case-main { min-width: 0; padding: 40px clamp(22px, 4vw, 58px) 78px; background: var(--chalk); }
 .case-main > * { width: min(100%, 1420px); margin-right: auto; margin-left: auto; }
@@ -426,26 +439,11 @@ code, .sha, dd { font-family: "SFMono-Regular", Consolas, "Liberation Mono", mon
   text-transform: uppercase;
   white-space: nowrap;
 }
-.state-ready,
-.state-allowed,
-.state-approve,
-.state-verified { border-color: var(--lime-dark); background: var(--lime); color: #253000; }
-.state-ready::before,
-.state-allowed::before,
-.state-approve::before,
-.state-verified::before { content: "✓"; }
-.state-blocked,
-.state-reject,
-.state-error { border-color: var(--rust); background: var(--rust-pale); color: #74291f; }
-.state-blocked::before,
-.state-reject::before,
-.state-error::before { content: "■"; font-size: 7px; }
-.state-waiting,
-.state-pending,
-.state-planned { border-color: var(--amber); background: var(--amber-pale); color: #684300; }
-.state-waiting::before,
-.state-pending::before,
-.state-planned::before { content: "◷"; font-size: 11px; }
+.state-family-verified { border-color: var(--lime-dark); background: var(--lime); color: #253000; }
+.state-family-blocked,
+.state-family-failed { border-color: var(--rust); background: var(--rust-pale); color: #74291f; }
+.state-family-active,
+.state-family-waiting { border-color: var(--amber); background: var(--amber-pale); color: #684300; }
 
 .case-sections {
   display: flex;
@@ -756,7 +754,7 @@ code, .sha, dd { font-family: "SFMono-Regular", Consolas, "Liberation Mono", mon
   .case-rail { position: static; height: auto; padding: 16px; }
   .case-rail .brand-lockup { padding: 0; }
   .case-rail .rail-label { margin: 22px 0 8px; }
-  .case-rail nav { display: flex; overflow-x: auto; margin: -10px; padding: 10px; scroll-padding-inline: 10px; }
+  .case-rail nav { display: flex; overflow-x: auto; overflow-y: hidden; margin: -10px; padding: 10px; scroll-padding-inline: 10px; }
   .case-link { min-width: 180px; }
   .rail-foot { margin-top: 12px; padding: 0; }
   .case-main { padding: 30px 20px 58px; }

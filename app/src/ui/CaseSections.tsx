@@ -1,14 +1,48 @@
 import { useMemo } from "react";
 
 import type { ChangeCase } from "../domain/case";
+import { statusPresentation, type OperationalStatus } from "./StatusIndicator";
 
 function shortUrn(urn: string): string {
   if (urn.includes(",")) return urn.split(",").at(-2)?.split(".").at(-1) ?? urn;
   return urn.split(":").at(-1) ?? urn;
 }
 
+const operationalState: Readonly<Record<string, OperationalStatus>> = {
+  ready: "verified",
+  allowed: "verified",
+  approve: "verified",
+  approved: "verified",
+  resolved: "verified",
+  verified: "verified",
+  blocked: "blocked",
+  blocked_context: "blocked",
+  blocked_ownership: "blocked",
+  blocked_approval: "blocked",
+  blocked_validation: "blocked",
+  in_progress: "active",
+  waiting: "waiting",
+  pending: "waiting",
+  planned: "waiting",
+  draft: "waiting",
+  stale: "failed",
+  reject: "failed",
+  error: "failed",
+};
+
 export function StatePill({ value }: { readonly value: string }) {
-  return <span className={`state-pill state-${value.replaceAll("_", "-")}`}>{value.replaceAll("_", " ")}</span>;
+  const text = value.replaceAll("_", " ");
+  const state = operationalState[value];
+  const className = `state-pill state-${value.replaceAll("_", "-")}`;
+  if (state === undefined) return <span className={className}>{text}</span>;
+  const { statusLabel, statusIcon } = statusPresentation(state);
+  const label = `${text.charAt(0).toUpperCase()}${text.slice(1)}`;
+  return (
+    <span className={`${className} state-family-${state}`} role="img" aria-label={`${label}: ${statusLabel} status`}>
+      <span aria-hidden="true">{statusIcon}</span>
+      <span>{text}</span>
+    </span>
+  );
 }
 
 function Empty({ children }: { readonly children: string }) {

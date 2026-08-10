@@ -26,6 +26,8 @@ function WorkspaceGate({ client, sessionClient }: {
   const [session, setSession] = useState<SessionState>();
   const [error, setError] = useState<string>();
   const [readKey, setReadKey] = useState(0);
+  const [signOutBusy, setSignOutBusy] = useState(false);
+  const [signOutError, setSignOutError] = useState<string>();
 
   useEffect(() => {
     let active = true;
@@ -64,10 +66,31 @@ function WorkspaceGate({ client, sessionClient }: {
   if (!session.authenticated) {
     return <main className="center-state"><p role="alert">Session verification failed. Unauthenticated local access was rejected.</p></main>;
   }
+  const signOut = async () => {
+    setSignOutBusy(true);
+    setSignOutError(undefined);
+    try {
+      await sessionClient.signOut();
+      setSession({ configured: true, authenticated: false });
+    } catch (caught) {
+      setSignOutError(caught instanceof Error ? caught.message : "Could not end the operator session");
+    } finally {
+      setSignOutBusy(false);
+    }
+  };
   return (
     <>
       {!session.configured && <p className="local-session-label" role="status">Local operator session · authentication not configured</p>}
-      <Workspace client={client} />
+      <Workspace
+        client={client}
+        {...(session.configured ? {
+          sessionAction: {
+            busy: signOutBusy,
+            ...(signOutError === undefined ? {} : { error: signOutError }),
+            onSignOut: () => void signOut(),
+          },
+        } : {})}
+      />
     </>
   );
 }

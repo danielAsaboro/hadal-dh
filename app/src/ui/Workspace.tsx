@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 
 import { AgentRunSnapshotSchema, type AgentRunSnapshot } from "../ai/run-events";
 import { ChangeCaseSchema, type ChangeCase } from "../domain/case";
-import { CaseRail } from "./CaseRail";
+import { CaseRail, type RailSessionAction } from "./CaseRail";
 import { CaseSections, StatePill } from "./CaseSections";
 import { ChangeFlow } from "./ChangeFlow";
 import {
@@ -59,7 +59,10 @@ function messageFrom(caught: unknown, fallback: string): string {
   return caught instanceof Error ? caught.message : fallback;
 }
 
-export function Workspace({ client = httpWorkspaceClient }: { readonly client?: WorkspaceClient }) {
+export function Workspace({ client = httpWorkspaceClient, sessionAction }: Readonly<{
+  client?: WorkspaceClient;
+  sessionAction?: RailSessionAction;
+}>) {
   const [cases, setCases] = useState<readonly ChangeCase[]>([]);
   const [current, setCurrent] = useState<ChangeCase>();
   const [loading, setLoading] = useState(true);
@@ -209,7 +212,13 @@ export function Workspace({ client = httpWorkspaceClient }: { readonly client?: 
 
   return (
     <div className="workspace-shell">
-      <CaseRail cases={cases} current={current} disabled={busy !== undefined} onSelect={(caseKey) => void selectCase(caseKey)} />
+      <CaseRail
+        cases={cases}
+        current={current}
+        disabled={busy !== undefined}
+        onSelect={(caseKey) => void selectCase(caseKey)}
+        {...(sessionAction === undefined ? {} : { sessionAction })}
+      />
 
       <main className="case-main" aria-labelledby="case-title">
         <header className="case-header" id="overview">

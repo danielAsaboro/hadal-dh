@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { Background, Controls, MiniMap, ReactFlow, type NodeMouseHandler, useNodesState } from "@xyflow/react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Background, Controls, MiniMap, ReactFlow, type OnSelectionChangeFunc, useNodesState } from "@xyflow/react";
 
 import type { AgentRunSnapshot } from "../ai/run-events";
 import type { ChangeCase } from "../domain/case";
@@ -15,7 +15,10 @@ export function ChangeFlow({ value, run }: Readonly<{ value: ChangeCase; run?: A
   const [selectedId, setSelectedId] = useState("decision");
   useEffect(() => setNodes(flow.nodes), [flow.nodes, setNodes]);
   const selected = nodes.find((node) => node.id === selectedId) ?? nodes[0]!;
-  const selectNode: NodeMouseHandler<ChangeNode> = (_event, node) => setSelectedId(node.id);
+  const synchronizeSelection = useCallback<OnSelectionChangeFunc<ChangeNode>>(({ nodes: selectedNodes }) => {
+    const selectedNode = selectedNodes.at(-1);
+    if (selectedNode !== undefined) setSelectedId(selectedNode.id);
+  }, []);
 
   return (
     <section className="flow-command-center" id="execution-graph" aria-label="Governed execution graph">
@@ -30,7 +33,7 @@ export function ChangeFlow({ value, run }: Readonly<{ value: ChangeCase; run?: A
             edges={flow.edges}
             nodeTypes={nodeTypes}
             onNodesChange={onNodesChange}
-            onNodeClick={selectNode}
+            onSelectionChange={synchronizeSelection}
             defaultViewport={{ x: 24, y: 150, zoom: 0.62 }}
             minZoom={0.32}
             maxZoom={1.35}

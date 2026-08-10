@@ -1,10 +1,17 @@
 import type { ChangeCase } from "../domain/case";
 
-export function CaseRail({ cases, current, disabled, onSelect }: Readonly<{
+export interface RailSessionAction {
+  readonly busy: boolean;
+  readonly error?: string;
+  readonly onSignOut: () => void;
+}
+
+export function CaseRail({ cases, current, disabled, onSelect, sessionAction }: Readonly<{
   cases: readonly ChangeCase[];
   current: ChangeCase;
   disabled: boolean;
   onSelect: (caseKey: string) => void;
+  sessionAction?: RailSessionAction;
 }>) {
   return (
     <aside className="case-rail" aria-label="Change cases">
@@ -28,6 +35,20 @@ export function CaseRail({ cases, current, disabled, onSelect }: Readonly<{
         <span className="canonical-icon" aria-hidden="true">✓</span>
         <span>DataHub canonical</span>
       </div>
+      {sessionAction !== undefined && (
+        <div className="rail-session">
+          {sessionAction.error !== undefined && (
+            <p role="alert"><strong>Sign-out failed.</strong> {sessionAction.error}</p>
+          )}
+          <button
+            className="rail-sign-out"
+            disabled={disabled || sessionAction.busy}
+            onClick={sessionAction.onSignOut}
+          >
+            {sessionAction.busy ? "Signing out…" : "Sign out"}
+          </button>
+        </div>
+      )}
     </aside>
   );
 }

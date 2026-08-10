@@ -6,6 +6,7 @@ import type { AgentRunSnapshot } from "../../src/ai/run-events";
 import type { ChangeCase, ImpactEvidence } from "../../src/domain/case";
 import { compileCase } from "../../src/domain/compile-case";
 import { App, type WorkspaceClient } from "../../src/ui/App";
+import { StatePill } from "../../src/ui/CaseSections";
 import { StatusIndicator, type OperationalStatus } from "../../src/ui/StatusIndicator";
 
 class TestResizeObserver implements ResizeObserver {
@@ -293,6 +294,52 @@ describe("ChangeMarshal coordination workspace", () => {
     expect(listCases).toHaveBeenCalledTimes(1);
   });
 
+  it("signs a configured operator out only after the session client succeeds", async () => {
+    const value = caseValue();
+    let finishSignOut: (() => void) | undefined;
+    const signOutResult = new Promise<void>((resolve) => { finishSignOut = resolve; });
+    const signOut = vi.fn(async () => await signOutResult);
+    const sessionClient = {
+      ...localSessionClient,
+      read: async () => ({ configured: true, authenticated: true }),
+      signOut,
+    };
+
+    render(<App client={clientFor(value)} sessionClient={sessionClient} initialPath="/workspace" />);
+
+    const signOutButton = await screen.findByRole("button", { name: /sign out/i });
+    expect(signOutButton.tabIndex).toBe(0);
+    expect(screen.queryByRole("heading", { name: /operator sign-in/i })).toBeNull();
+    fireEvent.click(signOutButton);
+
+    expect(signOut).toHaveBeenCalledTimes(1);
+    expect((signOutButton as HTMLButtonElement).disabled).toBe(true);
+    expect(signOutButton.textContent).toMatch(/signing out/i);
+    expect(screen.getByRole("heading", { name: /customers governed change/i })).not.toBeNull();
+
+    finishSignOut?.();
+    expect(await screen.findByRole("heading", { name: /operator sign-in/i })).not.toBeNull();
+  });
+
+  it("keeps a configured workspace open and reports a failed sign-out honestly", async () => {
+    const value = caseValue();
+    const signOut = vi.fn(async () => { throw new Error("Session store unavailable"); });
+    const sessionClient = {
+      ...localSessionClient,
+      read: async () => ({ configured: true, authenticated: true }),
+      signOut,
+    };
+
+    render(<App client={clientFor(value)} sessionClient={sessionClient} initialPath="/workspace" />);
+    fireEvent.click(await screen.findByRole("button", { name: /sign out/i }));
+
+    const failure = await screen.findByRole("alert");
+    expect(failure.textContent).toMatch(/sign-out failed.*session store unavailable/i);
+    expect(screen.getByRole("heading", { name: /customers governed change/i })).not.toBeNull();
+    expect(screen.queryByRole("heading", { name: /operator sign-in/i })).toBeNull();
+    expect((screen.getByRole("button", { name: /sign out/i }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
   it("renders token-free durable agent audit events from a reread DataHub case", async () => {
     const value = caseValue();
     const audited: ChangeCase = {
@@ -357,6 +404,31 @@ describe("ChangeMarshal coordination workspace", () => {
     expect(screen.queryByRole("button", { name: /Approve as/i })).toBeNull();
     expect(screen.getByRole("link", { name: /Open GitHub issue/i }).getAttribute("href"))
       .toBe("https://github.com/acme/warehouse/issues/1");
+    expect(screen.queryByRole("button", { name: /sign out/i })).toBeNull();
+  });
+
+  it.each([
+    ["Enter", "Enter"],
+    ["Space", " "],
+  ] as const)("keeps the evidence inspector synchronized with %s node selection", async (_label, key) => {
+    const value = caseValue();
+    render(<App client={clientFor(value)} sessionClient={localSessionClient} initialPath="/workspace" />);
+
+    const inspector = await screen.findByRole("complementary", { name: /selected execution evidence/i });
+    expect(within(inspector).getByRole("heading", { name: /merge decision/i })).not.toBeNull();
+    const dataHubNode = screen.getByText("DataHub impact").closest<HTMLElement>(".react-flow__node");
+    if (dataHubNode === null) throw new Error("DataHub React Flow node wrapper was not rendered");
+    expect(dataHubNode.tabIndex).toBe(0);
+    dataHubNode.focus();
+    fireEvent.keyDown(dataHubNode, { key, code: key === " " ? "Space" : key });
+
+    await waitFor(() => expect(within(inspector).getByRole("heading", { name: /DataHub impact/i })).not.toBeNull());
+    expect(within(inspector).getByText(/Exact graph evidence/i)).not.toBeNull();
+
+    const gitNode = screen.getByText("Git change").closest<HTMLElement>(".react-flow__node");
+    expect(gitNode).not.toBeNull();
+    fireEvent.click(gitNode!);
+    await waitFor(() => expect(within(inspector).getByRole("heading", { name: /Git change/i })).not.toBeNull());
   });
 
   it("names workspace landmarks and exposes canonical and action state as live text", async () => {
@@ -436,6 +508,21 @@ describe("ChangeMarshal coordination workspace", () => {
       expect(indicator.textContent).toContain(icon);
     },
   );
+
+  it.each([
+    ["blocked_context", "Blocked context", "Blocked", "■"],
+    ["blocked_ownership", "Blocked ownership", "Blocked", "■"],
+    ["in_progress", "In progress", "Active", "◆"],
+    ["stale", "Stale", "Failed", "×"],
+    ["approved", "Approved", "Verified", "✓"],
+    ["resolved", "Resolved", "Verified", "✓"],
+  ] as const)("maps %s to the %s operational family with icon and text", (state, label, family, icon) => {
+    render(<StatePill value={state} />);
+
+    const pill = screen.getByRole("img", { name: `${label}: ${family} status` });
+    expect(pill.textContent).toContain(label.toLowerCase());
+    expect(pill.textContent).toContain(icon);
+  });
 
   it("renders unavailable as a QVAC integration indicator without changing canonical flow stages", async () => {
     const value = caseValue();

@@ -259,6 +259,199 @@ describe("ChangeMarshal coordination workspace", () => {
     expect(screen.getByRole("heading", { name: /case not found/i })).not.toBeNull();
   });
 
+  it("keeps a compact governed identity while each case route mounts only its owned content", async () => {
+    const base = caseValue();
+    const value: ChangeCase = {
+      ...base,
+      dataHub: {
+        verified: true,
+        documentUrn: `urn:li:dataset:(urn:li:dataPlatform:datahub,change_marshal.${base.caseKey},PROD)`,
+        verifiedAt: "2026-08-09T15:20:00.000Z",
+      },
+    };
+    const listCases = vi.fn(async () => [value]);
+    render(<App client={clientFor(value, { listCases })} sessionClient={localSessionClient} initialPath={casePath(value)} />);
+
+    const identity = await screen.findByRole("region", { name: /customers governed change/i });
+    expect(identity.textContent).toContain("acme/warehouse");
+    expect(identity.textContent).toContain("email");
+    expect(identity.textContent).toContain("email_address");
+    expect(identity.textContent).toContain(value.revision.headSha);
+    expect(identity.textContent).toMatch(/DataHub.*reread verified/i);
+    expect(within(identity).getByRole("searchbox", { name: /find a governed case/i })).not.toBeNull();
+    const breadcrumb = within(identity).getByRole("navigation", { name: /case breadcrumb/i });
+    expect(within(breadcrumb).getByRole("link", { name: "Cases" }).getAttribute("href")).toBe("/workspace/cases");
+    const tabs = within(identity).getByRole("navigation", { name: /case pages/i });
+
+    const assertOnly = (page: string, owned: readonly RegExp[]) => {
+      const main = screen.getByRole("main", { name: /customers governed change/i });
+      for (const heading of owned) expect(within(main).getByRole("heading", { name: heading })).not.toBeNull();
+      const active = within(tabs).getByRole("link", { name: new RegExp(`^${page}$`, "i") });
+      expect(active.getAttribute("aria-current")).toBe("page");
+      expect(active.getAttribute("href")).toBe(casePath(value, page.toLowerCase()));
+      return main;
+    };
+
+    let main = assertOnly("Overview", [/merge authority/i, /case stage summary/i]);
+    expect(within(main).getByRole("region", { name: /case actions/i })).not.toBeNull();
+    expect(within(main).queryByRole("region", { name: /governed execution graph/i })).toBeNull();
+    expect(within(main).queryByRole("heading", { name: /^owner work$/i })).toBeNull();
+    expect(within(main).queryByRole("heading", { name: /SHA-bound human approvals/i })).toBeNull();
+    expect(within(main).queryByRole("region", { name: /QVAC coordination controls/i })).toBeNull();
+    expect(within(main).queryByRole("heading", { name: /verified timeline/i })).toBeNull();
+
+    fireEvent.click(within(tabs).getByRole("link", { name: "Work" }));
+    main = assertOnly("Work", [/^owner work$/i]);
+    expect(within(main).getByText(/Add a compatibility alias for the renamed column/i)).not.toBeNull();
+    expect(within(main).getAllByText(/validation receipt missing/i).length).toBeGreaterThan(0);
+    expect(within(main).queryByRole("region", { name: /case actions/i })).toBeNull();
+    expect(within(main).queryByRole("heading", { name: /SHA-bound human approvals/i })).toBeNull();
+
+    fireEvent.click(within(tabs).getByRole("link", { name: "Approvals" }));
+    main = assertOnly("Approvals", [/SHA-bound human approvals/i]);
+    expect(within(main).getAllByText(value.revision.headSha).length).toBeGreaterThan(0);
+    expect(within(main).getAllByText(/submit the requested review in GitHub, then reconcile/i).length).toBeGreaterThan(0);
+    expect(within(main).queryByRole("button", { name: /approve|deny/i })).toBeNull();
+    expect(within(main).queryByRole("heading", { name: /^owner work$/i })).toBeNull();
+
+    fireEvent.click(within(tabs).getByRole("link", { name: "Run" }));
+    main = screen.getByRole("main", { name: /customers governed change/i });
+    expect(within(tabs).getByRole("link", { name: "Run" }).getAttribute("aria-current")).toBe("page");
+    expect(await within(main).findByRole("region", { name: /QVAC coordination controls/i })).not.toBeNull();
+    expect(within(main).queryByRole("region", { name: /case actions/i })).toBeNull();
+    expect(within(main).queryByRole("heading", { name: /SHA-bound human approvals/i })).toBeNull();
+
+    fireEvent.click(within(tabs).getByRole("link", { name: "History" }));
+    main = assertOnly("History", [/verified timeline/i, /agent run history/i]);
+    expect(within(main).queryByRole("region", { name: /QVAC coordination controls/i })).toBeNull();
+    expect(within(main).queryByRole("heading", { name: /^owner work$/i })).toBeNull();
+    expect(listCases).toHaveBeenCalledTimes(1);
+  });
+
+  it("lazy-loads only the Graph page behind an honest state and keeps exact React Flow interaction", async () => {
+    const value = caseValue();
+    let finishCases: ((values: readonly ChangeCase[]) => void) | undefined;
+    const cases = new Promise<readonly ChangeCase[]>((resolve) => { finishCases = resolve; });
+    render(<Workspace
+      client={clientFor(value, { listCases: async () => await cases })}
+      route={{ kind: "case", caseKey: value.caseKey, page: "graph" }}
+      onNavigate={() => undefined}
+    />);
+
+    finishCases?.([value]);
+    const loading = await screen.findByRole("status", { name: /governed graph loading status/i });
+    expect(loading.textContent).toMatch(/loading governed execution graph/i);
+
+    const graph = await screen.findByRole("region", { name: /governed execution graph/i });
+    expect(within(graph).getByRole("button", { name: /zoom in/i })).not.toBeNull();
+    expect(within(graph).getByRole("button", { name: /zoom out/i })).not.toBeNull();
+    expect(within(graph).getByLabelText(/execution graph mini map/i)).not.toBeNull();
+    const inspector = within(graph).getByRole("complementary", { name: /selected execution evidence/i });
+    const dataHubNode = within(graph).getByText("DataHub impact").closest<HTMLElement>(".react-flow__node");
+    if (dataHubNode === null) throw new Error("DataHub React Flow node wrapper was not rendered");
+    dataHubNode.focus();
+    fireEvent.keyDown(dataHubNode, { key: "Enter", code: "Enter" });
+    await waitFor(() => expect(within(inspector).getByRole("heading", { name: /DataHub impact/i })).not.toBeNull());
+    expect(screen.getByRole("heading", { name: /exact impact paths/i })).not.toBeNull();
+    expect(screen.getByText(/email.*email/i)).not.toBeNull();
+    expect(screen.queryByRole("region", { name: /case actions/i })).toBeNull();
+  });
+
+  it("paginates case-owned work at twenty-five real items without hiding missing evidence", async () => {
+    const base = caseValue();
+    const template = base.workItems[0]!;
+    const value: ChangeCase = {
+      ...base,
+      workItems: Array.from({ length: 26 }, (_, index) => ({
+        ...template,
+        workKey: index.toString(16).padStart(24, "0"),
+        title: `Governed owner work ${String(index).padStart(2, "0")}`,
+      })),
+      externalProjections: [],
+      validationReceipts: [],
+    };
+    render(<App client={clientFor(value)} sessionClient={localSessionClient} initialPath={casePath(value, "work")} />);
+
+    const work = await screen.findByRole("region", { name: /^owner work$/i });
+    expect(within(work).getAllByRole("article")).toHaveLength(25);
+    expect(within(work).getByText("Governed owner work 00")).not.toBeNull();
+    expect(within(work).queryByText("Governed owner work 25")).toBeNull();
+    expect(within(work).getAllByText(/GitHub projection missing/i)).toHaveLength(25);
+    expect(screen.getByRole("status", { name: /work pagination/i }).textContent).toMatch(/Page 1 of 2.*26 rows/i);
+
+    fireEvent.click(screen.getByRole("button", { name: /next page/i }));
+    expect(within(work).getAllByRole("article")).toHaveLength(1);
+    expect(within(work).getByText("Governed owner work 25")).not.toBeNull();
+  });
+
+  it("keeps every blocker reachable through an explicit twenty-five-row expansion", async () => {
+    const base = caseValue();
+    const blockers = Array.from({ length: 26 }, (_, index) => `BLOCKER_${String(index).padStart(2, "0")}`);
+    const value: ChangeCase = {
+      ...base,
+      admission: {
+        allowed: false,
+        blockers,
+        revisionKey: base.revision.revisionKey,
+        headSha: base.revision.headSha,
+        evaluatedAt: "2026-08-09T16:00:00.000Z",
+      },
+    };
+    render(<App client={clientFor(value)} sessionClient={localSessionClient} initialPath={casePath(value)} />);
+
+    const panel = (await screen.findByRole("heading", { name: /merge authority/i })).closest("section");
+    if (panel === null) throw new Error("Merge authority panel was not rendered");
+    expect(panel.querySelector(":scope > .blocker-list")?.children).toHaveLength(25);
+    const moreBlockers = within(panel).getByText(/show 1 more blocker/i).closest("details");
+    expect(moreBlockers?.open).toBe(false);
+    fireEvent.click(within(moreBlockers!).getByText(/show 1 more blocker/i));
+    expect(moreBlockers?.open).toBe(true);
+    expect(moreBlockers?.querySelector(".blocker-list")?.children).toHaveLength(1);
+    expect(within(panel).getByText("BLOCKER_25")).not.toBeNull();
+  });
+
+  it("bounds long completion criteria and GitHub decision collections with explicit expansion", async () => {
+    const base = caseValue();
+    const work = base.workItems[0]!;
+    const requirement = base.approvalRequirements[0]!;
+    const value: ChangeCase = {
+      ...base,
+      workItems: [{
+        ...work,
+        completionCriteria: Array.from({ length: 26 }, (_, index) => `Completion criterion ${String(index).padStart(2, "0")}`),
+      }, ...base.workItems.slice(1)],
+      approvalDecisions: Array.from({ length: 26 }, (_, index) => ({
+        requirementKey: requirement.requirementKey,
+        revisionKey: requirement.revisionKey,
+        headSha: base.revision.headSha,
+        role: requirement.role,
+        ownerUrn: requirement.ownerUrn,
+        actorLogin: `reviewer-${String(index).padStart(2, "0")}`,
+        verdict: "approve" as const,
+        decidedAt: `2026-08-09T15:00:${String(index).padStart(2, "0")}.000Z`,
+        source: "github" as const,
+        externalId: `review-${index}`,
+        url: `https://github.com/acme/warehouse/pull/17#review-${index}`,
+      })),
+    };
+    render(<App client={clientFor(value)} sessionClient={localSessionClient} initialPath={casePath(value, "work")} />);
+
+    const criteria = await screen.findByRole("region", { name: /completion criteria for implement compatible producer migration/i });
+    expect(criteria.querySelector(":scope > ul")?.children).toHaveLength(25);
+    const moreCriteria = within(criteria).getByText(/show 1 more completion criterion/i).closest("details");
+    expect(moreCriteria?.open).toBe(false);
+    fireEvent.click(within(moreCriteria!).getByText(/show 1 more completion criterion/i));
+    expect(moreCriteria?.open).toBe(true);
+    expect(moreCriteria?.querySelector("ul")?.children).toHaveLength(1);
+
+    fireEvent.click(within(screen.getByRole("navigation", { name: /case pages/i })).getByRole("link", { name: "Approvals" }));
+    const approvals = await screen.findByRole("heading", { name: /SHA-bound human approvals/i });
+    const approvalsPage = approvals.closest("section");
+    if (approvalsPage === null) throw new Error("Approval page was not rendered");
+    fireEvent.click(within(approvalsPage).getByText(/show 1 more GitHub decision/i));
+    expect(within(approvalsPage).getByText("reviewer-25")).not.toBeNull();
+  });
+
   it("bounds the global case table to twenty-five real rows per page", async () => {
     const values = Array.from({ length: 26 }, (_, index) => caseValue({
       repository: `acme/repository-${String(index).padStart(2, "0")}`,
@@ -546,6 +739,15 @@ describe("ChangeMarshal coordination workspace", () => {
         ],
         answer: "Verified remediation outcome",
         createdAt: "2026-08-09T15:00:00.000Z", updatedAt: "2026-08-09T15:02:00.000Z",
+      }, {
+        runId: "run-durable-failed", caseKey: value.caseKey, revisionKey: value.revision.revisionKey,
+        headSha: value.revision.headSha, modelId: "qwen3.6-27b", status: "failed",
+        events: [
+          { kind: "run_started", sequence: 1, at: "2026-08-09T16:00:00.000Z", summary: "Governed run started" },
+          { kind: "tool_failed", sequence: 2, at: "2026-08-09T16:01:00.000Z", summary: "DataHub write-back failed closed", toolName: "publishMergeDecision", toolCallId: "call-failed" },
+          { kind: "run_failed", sequence: 3, at: "2026-08-09T16:02:00.000Z", summary: "Run stopped without verified completion" },
+        ],
+        createdAt: "2026-08-09T16:00:00.000Z", updatedAt: "2026-08-09T16:02:00.000Z",
       }],
     };
     const client: WorkspaceClient = {
@@ -556,16 +758,22 @@ describe("ChangeMarshal coordination workspace", () => {
       approveAgent: async () => { throw new Error("not used"); },
     };
 
-    render(<App client={client} sessionClient={localSessionClient} initialPath={casePath(audited)} />);
+    render(<App client={client} sessionClient={localSessionClient} initialPath={casePath(audited, "history")} />);
 
-    const audit = await screen.findByRole("list", { name: /durable agent audit/i });
-    expect(audit.textContent).toContain("qwen3.6-27b");
+    const completedRun = await screen.findByText("run-durable-1");
+    const disclosure = completedRun.closest("details");
+    expect(disclosure?.open).toBe(false);
+    const failedRun = screen.getByText("run-durable-failed").closest("details");
+    expect(failedRun?.textContent).toMatch(/Run stopped without verified completion/i);
+    fireEvent.click(within(disclosure!).getByText("run-durable-1"));
+    const audit = await within(disclosure!).findByRole("list", { name: /durable agent audit/i });
+    expect(disclosure?.textContent).toContain("qwen3.6-27b");
     expect(audit.textContent).toContain("tool approved");
     expect(audit.textContent).toContain("Approved exact arguments");
     expect(screen.queryByRole("button", { name: /Approve generateRemediation/i })).toBeNull();
   });
 
-  it("renders governed evidence, work, approvals, blockers, and real projections", async () => {
+  it("renders governed work with real projections and missing receipts", async () => {
     const value = caseValue();
     const client: WorkspaceClient = {
       listCases: async () => [value],
@@ -577,23 +785,16 @@ describe("ChangeMarshal coordination workspace", () => {
       startAgent: async () => { throw new Error("not used"); },
       approveAgent: async () => { throw new Error("not used"); },
     };
-    render(<App client={client} sessionClient={localSessionClient} initialPath={casePath(value)} />);
+    render(<App client={client} sessionClient={localSessionClient} initialPath={casePath(value, "work")} />);
 
     expect(screen.getByText("Verifying operator session…")).not.toBeNull();
     await waitFor(() => expect(screen.getByRole("heading", { name: /customers/i })).not.toBeNull());
-    expect(screen.getByRole("region", { name: /governed execution graph/i })).not.toBeNull();
-    expect(screen.getByText("Git change")).not.toBeNull();
-    expect(screen.getAllByText("Merge decision").length).toBeGreaterThan(0);
-    expect(screen.getByText(/Deterministic policy alone controls admission/i)).not.toBeNull();
     expect(screen.getByText("ChangeMarshal")).not.toBeNull();
     expect(screen.queryByText("Cutset")).toBeNull();
     expect(screen.getByLabelText("email → email_address")).not.toBeNull();
-    expect(screen.getByText(/OWNER_MAPPING_MISSING/)).not.toBeNull();
     expect(screen.getAllByText("orders").length).toBeGreaterThan(0);
     expect(screen.getByText(/Implement compatible producer migration/)).not.toBeNull();
-    expect(screen.getAllByText("Awaiting").length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/Submit the requested review in GitHub/i).length).toBeGreaterThan(0);
-    expect(screen.queryByRole("button", { name: /Approve as/i })).toBeNull();
+    expect(screen.getAllByText(/validation receipt missing/i).length).toBeGreaterThan(0);
     expect(screen.getByRole("link", { name: /Open GitHub issue/i }).getAttribute("href"))
       .toBe("https://github.com/acme/warehouse/issues/1");
     expect(screen.queryByRole("button", { name: /sign out/i })).toBeNull();
@@ -604,7 +805,7 @@ describe("ChangeMarshal coordination workspace", () => {
     ["Space", " "],
   ] as const)("keeps the evidence inspector synchronized with %s node selection", async (_label, key) => {
     const value = caseValue();
-    render(<App client={clientFor(value)} sessionClient={localSessionClient} initialPath={casePath(value)} />);
+    render(<App client={clientFor(value)} sessionClient={localSessionClient} initialPath={casePath(value, "graph")} />);
 
     const inspector = await screen.findByRole("complementary", { name: /selected execution evidence/i });
     expect(within(inspector).getByRole("heading", { name: /merge decision/i })).not.toBeNull();
@@ -635,8 +836,8 @@ describe("ChangeMarshal coordination workspace", () => {
 
     const workspace = await screen.findByRole("main", { name: /customers governed change/i });
     expect(screen.getByRole("navigation", { name: /workspace navigation/i })).not.toBeNull();
-    const sections = within(workspace).getByRole("navigation", { name: /case sections/i });
-    expect(within(sections).getByRole("link", { name: /graph/i }).getAttribute("href")).toBe("#execution-graph");
+    const sections = within(workspace).getByRole("navigation", { name: /case pages/i });
+    expect(within(sections).getByRole("link", { name: /graph/i }).getAttribute("href")).toBe(casePath(value, "graph"));
 
     const canonical = screen.getByRole("status", { name: /canonical DataHub context/i });
     expect(canonical.getAttribute("aria-live")).toBe("polite");
@@ -726,7 +927,7 @@ describe("ChangeMarshal coordination workspace", () => {
     render(<App
       client={clientFor(value, { agentHealth: async () => { throw new Error("QVAC endpoint offline"); } })}
       sessionClient={localSessionClient}
-      initialPath={casePath(value)}
+      initialPath={casePath(value, "run")}
     />);
 
     await screen.findByRole("status", { name: /QVAC integration status/i });
@@ -751,7 +952,7 @@ describe("ChangeMarshal coordination workspace", () => {
       startAgent,
       approveAgent,
     };
-    render(<App client={client} sessionClient={localSessionClient} initialPath={casePath(value)} />);
+    render(<App client={client} sessionClient={localSessionClient} initialPath={casePath(value, "run")} />);
 
     const run = await screen.findByRole("button", { name: /Run QVAC coordinator/i });
     fireEvent.click(run);
@@ -792,7 +993,7 @@ describe("ChangeMarshal coordination workspace", () => {
       startAgent: async () => pending,
       approveAgent,
     };
-    render(<App client={client} sessionClient={localSessionClient} initialPath={casePath(value)} />);
+    render(<App client={client} sessionClient={localSessionClient} initialPath={casePath(value, "run")} />);
 
     fireEvent.click(await screen.findByRole("button", { name: /Run QVAC coordinator/i }));
     fireEvent.click(await screen.findByRole("button", { name: /Deny generateRemediation/i }));
@@ -824,13 +1025,18 @@ describe("ChangeMarshal coordination workspace", () => {
       startAgent: async () => pending,
       approveAgent: async () => ({ ...pending, status: "completed", pendingApproval: undefined }),
     };
-    render(<App client={client} sessionClient={localSessionClient} initialPath={casePath(caseA)} />);
+    render(<App client={client} sessionClient={localSessionClient} initialPath={casePath(caseA, "run")} />);
 
     fireEvent.click(await screen.findByRole("button", { name: /Run QVAC coordinator/i }));
     await screen.findByRole("group", { name: /Approval required for generateRemediation/i });
     fireEvent.change(screen.getByRole("searchbox", { name: /find a governed case/i }), { target: { value: "campaigns" } });
     fireEvent.click(screen.getByRole("link", { name: /campaigns.*acme\/marketing/i }));
     await screen.findByRole("heading", { name: /campaigns governed change/i });
+    expect(screen.queryByRole("group", { name: /Approval required for generateRemediation/i })).toBeNull();
+
+    window.history.pushState({}, "", casePath(caseA, "run"));
+    fireEvent(window, new PopStateEvent("popstate"));
+    await screen.findByRole("heading", { name: /customers governed change/i });
 
     const gate = screen.getByRole("group", { name: /Approval required for generateRemediation/i });
     expect(gate.textContent).toContain(caseA.caseKey);
@@ -840,7 +1046,7 @@ describe("ChangeMarshal coordination workspace", () => {
 
     fireEvent.click(within(gate).getByRole("button", { name: /Approve generateRemediation/i }));
     await waitFor(() => expect(getCase).toHaveBeenLastCalledWith(caseA.caseKey));
-    expect(screen.getByRole("heading", { name: /campaigns governed change/i })).not.toBeNull();
+    expect(screen.getByRole("heading", { name: /customers governed change/i })).not.toBeNull();
   });
 
   it("explains an unavailable QVAC integration and retries its real health check", async () => {
@@ -858,7 +1064,7 @@ describe("ChangeMarshal coordination workspace", () => {
       startAgent: async () => { throw new Error("not used"); },
       approveAgent: async () => { throw new Error("not used"); },
     };
-    render(<App client={client} sessionClient={localSessionClient} initialPath={casePath(value)} />);
+    render(<App client={client} sessionClient={localSessionClient} initialPath={casePath(value, "run")} />);
 
     const status = await screen.findByRole("status", { name: /QVAC integration status/i });
     expect(status.textContent).toMatch(/unavailable.*QVAC endpoint offline/i);

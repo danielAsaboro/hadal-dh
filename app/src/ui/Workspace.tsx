@@ -3,14 +3,9 @@ import { useEffect, useState, type ReactNode } from "react";
 import { AgentRunSnapshotSchema, type AgentRunSnapshot } from "../ai/run-events";
 import { ChangeCaseSchema, type ChangeCase } from "../domain/case";
 import { AppRail, CasePicker, MobileWorkspaceMenu, type RailSessionAction } from "./AppRail";
-import { CaseSections, StatePill } from "./CaseSections";
-import { ChangeFlow } from "./ChangeFlow";
+import { CasePage } from "./CasePage";
 import { GlobalPage } from "./GlobalPages";
-import {
-  GovernedAgentPanel,
-  type AgentHealth,
-  type AgentHealthState,
-} from "./GovernedAgentPanel";
+import type { AgentHealth, AgentHealthState } from "./GovernedAgentPanel";
 import type { AppRoute } from "./routes";
 
 export {
@@ -68,7 +63,7 @@ function messageFrom(caught: unknown, fallback: string): string {
   return caught instanceof Error ? caught.message : fallback;
 }
 
-type AuthenticatedWorkspaceRoute = Exclude<AppRoute, { kind: "landing" | "public-not-found" | "case-redirect" }>;
+type AuthenticatedWorkspaceRoute = Exclude<AppRoute, { kind: "landing" | "public-not-found" | "case-redirect" | "workspace-not-found" }>;
 
 export function Workspace({ client = httpWorkspaceClient, sessionAction, route, onNavigate }: Readonly<{
   client?: WorkspaceClient;
@@ -86,6 +81,7 @@ export function Workspace({ client = httpWorkspaceClient, sessionAction, route, 
   const [agentHealth, setAgentHealth] = useState<AgentHealthState>({ status: "checking" });
   const [healthKey, setHealthKey] = useState(0);
   const [agentRun, setAgentRun] = useState<AgentRunSnapshot>();
+  const runRouteActive = route.kind === "case" && route.page === "run";
 
   useEffect(() => {
     let active = true;
@@ -109,6 +105,7 @@ export function Workspace({ client = httpWorkspaceClient, sessionAction, route, 
     : retainedCase;
 
   useEffect(() => {
+    if (!runRouteActive) return;
     let active = true;
     setAgentHealth((existing) => existing.status === "unavailable"
       ? { status: "checking", previousFailure: existing.message }
@@ -119,7 +116,7 @@ export function Workspace({ client = httpWorkspaceClient, sessionAction, route, 
       if (active) setAgentHealth({ status: "unavailable", message: messageFrom(caught, "QVAC health check did not complete") });
     });
     return () => { active = false; };
-  }, [client, healthKey]);
+  }, [client, healthKey, runRouteActive]);
 
   const updateCase = (value: ChangeCase) => {
     setRetainedCase(value);
@@ -227,7 +224,7 @@ export function Workspace({ client = httpWorkspaceClient, sessionAction, route, 
             <span>Canonical operations</span>
             <strong>{route.kind === "case" && current !== undefined ? `${current.repository} · ${current.change.modelName}` : "All governed cases"}</strong>
           </div>
-          <CasePicker cases={cases} disabled={busy !== undefined} onOpenCase={selectCase} />
+          {route.kind !== "case" && <CasePicker cases={cases} disabled={busy !== undefined} onOpenCase={selectCase} />}
         </header>
         {error && <div className="shell-error error-banner" role="alert"><strong>Not verified.</strong> {error}</div>}
         {content}
@@ -247,8 +244,7 @@ export function Workspace({ client = httpWorkspaceClient, sessionAction, route, 
     );
   }
 
-  const runCase = agentRun === undefined ? undefined : cases.find((item) => item.caseKey === agentRun.caseKey);
-  const visibleRun = runCase === undefined ? undefined : agentRun;
+  const visibleRun = agentRun?.caseKey === current.caseKey ? agentRun : undefined;
   const actionStatus = busy === "sync"
     ? "Syncing owner work…"
     : busy === "reconcile"
@@ -259,45 +255,23 @@ export function Workspace({ client = httpWorkspaceClient, sessionAction, route, 
           ? "Case actions ready"
           : "Another governed operation is in progress…";
 
-  return (
-    renderShell(
-      <main className="case-main" aria-labelledby="case-title">
-        <header className="case-header" id="overview">
-          <div>
-            <p className="eyebrow">{current.repository} · {current.caseKey}</p>
-            <h1 id="case-title">{current.change.modelName} governed change</h1>
-            <p className="change-line" aria-label={`${current.change.oldName} → ${current.change.newName}`}><code>{current.change.oldName}</code><span>→</span><code>{current.change.newName}</code></p>
-          </div>
-          <div className="header-state"><StatePill value={current.state} /><span className="sha">{current.revision.headSha}</span></div>
-        </header>
-
-        <nav className="case-sections" aria-label="Case sections">
-          <a href="#overview">Overview</a><a href="#execution-graph">Graph</a><a href="#work">Work</a>
-          <a href="#approvals">Approvals</a><a href="#evidence">Evidence</a><a href="#history">History</a>
-        </nav>
-
-        <span className="sr-only" role="status" aria-label="Case action status" aria-live="polite">{actionStatus}</span>
-        <section className="command-bar" aria-label="Case actions" aria-busy={busy !== undefined}>
-          <button disabled={busy !== undefined} onClick={() => void mutate("sync", () => client.sync(current.caseKey))}>{busy === "sync" ? "Syncing owner work…" : "Sync owner work"}</button>
-          <button disabled={busy !== undefined} onClick={() => void mutate("reconcile", () => client.reconcile(current.caseKey))}>{busy === "reconcile" ? "Reconciling GitHub…" : "Reconcile GitHub"}</button>
-          <button className="primary-action" disabled={busy !== undefined} onClick={() => void mutate("decide", () => client.decide(current.caseKey, window.location.href))}>
-            {busy === "decide" ? "Verifying…" : "Evaluate merge"}
-          </button>
-        </section>
-
-        <GovernedAgentPanel
-          value={runCase ?? current}
-          health={agentHealth}
-          {...(visibleRun === undefined ? {} : { run: visibleRun })}
-          {...(busy === undefined ? {} : { busy })}
-          onRun={(prompt) => void coordinate(prompt)}
-          onResolveApproval={(approved) => void resolveAgentApproval(approved)}
-          onRetryHealth={() => setHealthKey((value) => value + 1)}
-        />
-
-        <ChangeFlow value={current} {...(visibleRun?.caseKey === current.caseKey ? { run: visibleRun } : {})} />
-        <CaseSections value={current} />
-      </main>,
-    )
+  return renderShell(
+    <CasePage
+      value={current}
+      cases={cases}
+      page={route.page}
+      {...(busy === undefined ? {} : { busy })}
+      actionStatus={actionStatus}
+      health={agentHealth}
+      {...(visibleRun === undefined ? {} : { run: visibleRun })}
+      onNavigate={onNavigate}
+      onOpenCase={selectCase}
+      onSync={() => void mutate("sync", () => client.sync(current.caseKey))}
+      onReconcile={() => void mutate("reconcile", () => client.reconcile(current.caseKey))}
+      onEvaluate={() => void mutate("decide", () => client.decide(current.caseKey, window.location.href))}
+      onRun={(prompt) => void coordinate(prompt)}
+      onResolveApproval={(approved) => void resolveAgentApproval(approved)}
+      onRetryHealth={() => setHealthKey((value) => value + 1)}
+    />,
   );
 }

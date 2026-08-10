@@ -11,7 +11,7 @@ import { adaptChangeMarshalAgent, GovernedAgentRunService } from "../ai/run-serv
 import { toDurableAgentRun } from "../ai/run-events";
 import { CasesService } from "../application/cases";
 import { AtomicCaseReplica } from "../application/replica";
-import { agentScopeFromEnv, dataHubMcpConfigFromEnv, githubConfigFromEnv, productEnv, qvacConfigFromEnv, warnLegacyProductEnv } from "../config";
+import { agentScopeFromEnv, dataHubMcpConfigFromEnv, githubConfigFromEnv, productEnv, qvacConfigFromEnv, uiSessionConfigFromEnv, warnLegacyProductEnv } from "../config";
 import { DataHubCaseStore } from "../datahub/case-store";
 import { collectEvidence } from "../datahub/evidence";
 import { DataHubMcpClient } from "../datahub/mcp-client";
@@ -46,6 +46,7 @@ const githubSurface = {
 let qvac: QvacModelHandle | undefined;
 let agentRun: GovernedAgentRunService | undefined;
 let agentScope: ReturnType<typeof agentScopeFromEnv> | undefined;
+const session = uiSessionConfigFromEnv();
 if (productEnv(process.env, "AGENT_ENABLED") === "1") {
   try {
     const scope = agentScopeFromEnv(repositoryRoot);
@@ -83,6 +84,7 @@ const server = createServer({
   application: service,
   repoRoot: repositoryRoot,
   github: connector,
+  ...(session === undefined ? {} : { session }),
   ...(agentRun === undefined || agentScope === undefined ? {} : { agent: agentRun, agentScope }),
 });
 const distribution = resolve(fileURLToPath(new URL("../../dist", import.meta.url)));

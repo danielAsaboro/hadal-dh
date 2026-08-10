@@ -1,5 +1,6 @@
 import type { DataHubMcpConfig } from "./datahub/mcp-client";
 import type { AgentScope } from "./ai/orchestrator";
+import type { UiSessionConfig } from "./server/session";
 
 type Environment = Readonly<Record<string, string | undefined>>;
 
@@ -136,6 +137,20 @@ export function qvacConfigFromEnv(env: Environment = process.env): QvacRuntimeCo
     model,
     contextSize,
     reasoningBudget,
+  };
+}
+
+export function uiSessionConfigFromEnv(env: Environment = process.env): UiSessionConfig | undefined {
+  const passphrase = productEnv(env, "UI_PASSPHRASE");
+  const signingSecret = productEnv(env, "UI_SESSION_SECRET");
+  if (passphrase === undefined && signingSecret === undefined) return undefined;
+  if (!passphrase || !signingSecret) {
+    throw new ConfigError("CHANGEMARSHAL_UI_PASSPHRASE and CHANGEMARSHAL_UI_SESSION_SECRET must be configured together");
+  }
+  return {
+    passphrase,
+    signingSecret,
+    ttlSeconds: integerEnv(productEnv(env, "UI_SESSION_TTL_SECONDS"), 28_800, "CHANGEMARSHAL_UI_SESSION_TTL_SECONDS", 60),
   };
 }
 

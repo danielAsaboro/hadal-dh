@@ -13,6 +13,7 @@ import { generateCompatibilityMigration } from "../remediation/generate";
 import { validateRemediation } from "../remediation/validate";
 import { writeRemediationArtifacts } from "../remediation/write";
 import { runValidation, ValidationRunnerError } from "../validation/runner";
+import { registerSessionRoutes, requireSession, type UiSessionConfig } from "./session";
 
 export interface CaseApplication {
   list(): Promise<readonly ChangeCase[]>;
@@ -30,6 +31,7 @@ export interface ServerDependencies {
   readonly repoRoot?: string;
   readonly agent?: AgentRunApplication;
   readonly agentScope?: Readonly<{ repository: string; baseRef: string; headRef: string }>;
+  readonly session?: UiSessionConfig;
 }
 
 export interface AgentRunApplication {
@@ -76,6 +78,11 @@ export function createServer(dependencies: ServerDependencies): FastifyInstance 
     const name = error instanceof Error ? error.name : "Error";
     const message = error instanceof Error ? error.message : "unknown server error";
     void reply.status(status).send({ error: name, message });
+  });
+  registerSessionRoutes(server, dependencies.session);
+  server.addHook("onRequest", async (request, reply) => {
+    if (dependencies.session === undefined || !/^\/api\/(cases|agent)(?:\/|$)/.test(request.url)) return;
+    await requireSession(request, reply, dependencies.session);
   });
   server.get("/api/health", async () => ({ ok: true, service: "changemarshal" }));
   server.get("/api/agent/health", async (_request, reply) => {

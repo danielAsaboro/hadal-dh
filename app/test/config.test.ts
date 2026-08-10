@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { agentScopeFromEnv, aiConfigFromEnv, ConfigError, dataHubMcpConfigFromEnv, githubConfigFromEnv, parseCommand, qvacConfigFromEnv, warnLegacyProductEnv } from "../src/config";
+import { agentScopeFromEnv, aiConfigFromEnv, ConfigError, dataHubMcpConfigFromEnv, githubConfigFromEnv, parseCommand, qvacConfigFromEnv, uiSessionConfigFromEnv, warnLegacyProductEnv } from "../src/config";
 
 describe("runtime configuration", () => {
   it("builds explicit real MCP HTTP and stdio configurations", () => {
@@ -122,5 +122,23 @@ describe("runtime configuration", () => {
     expect(messages).toEqual([
       "ChangeMarshal accepted legacy environment variables CUTSET_GITHUB_REPOSITORY, CUTSET_GITHUB_TOKEN; migrate them to the CHANGEMARSHAL_ prefix.\n",
     ]);
+  });
+
+  it("enables UI sessions only with both explicit credentials", () => {
+    expect(uiSessionConfigFromEnv({})).toBeUndefined();
+    expect(uiSessionConfigFromEnv({
+      CHANGEMARSHAL_UI_PASSPHRASE: "operator-passphrase",
+      CHANGEMARSHAL_UI_SESSION_SECRET: "a signing secret that is long enough for test use",
+    })).toEqual({
+      passphrase: "operator-passphrase",
+      signingSecret: "a signing secret that is long enough for test use",
+      ttlSeconds: 28_800,
+    });
+    expect(() => uiSessionConfigFromEnv({ CHANGEMARSHAL_UI_PASSPHRASE: "operator-passphrase" })).toThrow(/UI_SESSION_SECRET/i);
+    expect(() => uiSessionConfigFromEnv({
+      CHANGEMARSHAL_UI_PASSPHRASE: "operator-passphrase",
+      CHANGEMARSHAL_UI_SESSION_SECRET: "a signing secret that is long enough for test use",
+      CHANGEMARSHAL_UI_SESSION_TTL_SECONDS: "0",
+    })).toThrow(/UI_SESSION_TTL_SECONDS/i);
   });
 });

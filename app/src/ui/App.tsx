@@ -97,8 +97,8 @@ function WorkspaceGate({ client, sessionClient, route, onNavigate }: {
       {!session.configured && <p className="local-session-label" role="status">Local operator session · authentication not configured</p>}
       <Workspace
         client={client}
-        {...(route.kind === "case" ? { requestedCaseKey: route.caseKey } : {})}
-        onNavigateToCase={(caseKey) => onNavigate(`/workspace/cases/${caseKey}/${route.kind === "case" ? route.page : "overview"}`)}
+        route={route}
+        onNavigate={onNavigate}
         {...(session.configured ? {
           sessionAction: {
             busy: signOutBusy,

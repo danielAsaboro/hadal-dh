@@ -1,15 +1,24 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import { AgentRunSnapshotSchema, type AgentRunSnapshot } from "../ai/run-events";
 import { ChangeCaseSchema, type ChangeCase } from "../domain/case";
-import { CaseRail, type RailSessionAction } from "./CaseRail";
+import { AppRail, CasePicker, MobileWorkspaceMenu, type RailSessionAction } from "./AppRail";
 import { CaseSections, StatePill } from "./CaseSections";
 import { ChangeFlow } from "./ChangeFlow";
+import { GlobalPage } from "./GlobalPages";
 import {
   GovernedAgentPanel,
   type AgentHealth,
   type AgentHealthState,
 } from "./GovernedAgentPanel";
+import type { AppRoute } from "./routes";
+
+export {
+  paginateRows,
+  selectApprovalRows,
+  selectAttentionCases,
+  selectWorkRows,
+} from "./workspace-selectors";
 
 export interface WorkspaceClient {
   listCases(): Promise<readonly ChangeCase[]>;
@@ -59,11 +68,13 @@ function messageFrom(caught: unknown, fallback: string): string {
   return caught instanceof Error ? caught.message : fallback;
 }
 
-export function Workspace({ client = httpWorkspaceClient, sessionAction, requestedCaseKey, onNavigateToCase }: Readonly<{
+type AuthenticatedWorkspaceRoute = Exclude<AppRoute, { kind: "landing" | "public-not-found" | "case-redirect" }>;
+
+export function Workspace({ client = httpWorkspaceClient, sessionAction, route, onNavigate }: Readonly<{
   client?: WorkspaceClient;
   sessionAction?: RailSessionAction;
-  requestedCaseKey?: string;
-  onNavigateToCase?: (caseKey: string) => void;
+  route: AuthenticatedWorkspaceRoute;
+  onNavigate: (destination: string) => void;
 }>) {
   const [cases, setCases] = useState<readonly ChangeCase[]>([]);
   const [current, setCurrent] = useState<ChangeCase>();
@@ -82,7 +93,7 @@ export function Workspace({ client = httpWorkspaceClient, sessionAction, request
     void client.listCases().then((values) => {
       if (!active) return;
       setCases(values);
-      setCurrent(requestedCaseKey === undefined ? values[0] : values.find((item) => item.caseKey === requestedCaseKey));
+      setCurrent(route.kind === "case" ? values.find((item) => item.caseKey === route.caseKey) : values[0]);
       setCaseLoadError(undefined);
       setLoading(false);
     }).catch((caught: unknown) => {
@@ -94,9 +105,9 @@ export function Workspace({ client = httpWorkspaceClient, sessionAction, request
   }, [caseLoadKey, client]);
 
   useEffect(() => {
-    if (requestedCaseKey === undefined || loading) return;
-    setCurrent(cases.find((item) => item.caseKey === requestedCaseKey));
-  }, [cases, loading, requestedCaseKey]);
+    if (route.kind !== "case" || loading) return;
+    setCurrent(cases.find((item) => item.caseKey === route.caseKey));
+  }, [cases, loading, route, route.kind]);
 
   useEffect(() => {
     let active = true;
@@ -134,7 +145,8 @@ export function Workspace({ client = httpWorkspaceClient, sessionAction, request
     try {
       const selected = await client.getCase(caseKey);
       setCurrent(selected);
-      onNavigateToCase?.(selected.caseKey);
+      setCases((existing) => existing.map((item) => item.caseKey === selected.caseKey ? selected : item));
+      onNavigate(`/workspace/cases/${selected.caseKey}/overview`);
     } catch (caught) {
       setError(messageFrom(caught, "Case selection failed without a verified DataHub reread"));
     } finally {
@@ -196,22 +208,43 @@ export function Workspace({ client = httpWorkspaceClient, sessionAction, request
       </main>
     );
   }
+  const renderShell = (content: ReactNode) => (
+    <div className="workspace-shell">
+      <AppRail
+        route={route}
+        onNavigate={onNavigate}
+        disabled={busy !== undefined}
+        {...(sessionAction === undefined ? {} : { sessionAction })}
+      />
+      <div className="workspace-content">
+        <header className="workspace-context">
+          <MobileWorkspaceMenu
+            route={route}
+            onNavigate={onNavigate}
+            disabled={busy !== undefined}
+            {...(sessionAction === undefined ? {} : { sessionAction })}
+          />
+          <div className="context-copy">
+            <span>Canonical operations</span>
+            <strong>{route.kind === "case" && current !== undefined ? `${current.repository} · ${current.change.modelName}` : "All governed cases"}</strong>
+          </div>
+          <CasePicker cases={cases} disabled={busy !== undefined} onOpenCase={selectCase} />
+        </header>
+        {error && <div className="shell-error error-banner" role="alert"><strong>Not verified.</strong> {error}</div>}
+        {content}
+      </div>
+    </div>
+  );
+
+  if (route.kind === "workspace") return renderShell(<GlobalPage page={route.page} cases={cases} onNavigate={onNavigate} />);
   if (current === undefined) {
-    if (requestedCaseKey !== undefined && cases.length > 0) {
-      return (
-        <main className="center-state" aria-labelledby="case-not-found-title">
+    return renderShell(
+      <main className="case-main center-state" aria-labelledby="case-not-found-title">
+        <div>
           <h1 id="case-not-found-title">Case not found</h1>
           <p>The requested governed case is not available from the canonical DataHub case collection.</p>
-        </main>
-      );
-    }
-    return (
-      <main className="center-state">
-        <div role="status" aria-label="Governed case empty state">
-          <p>No governed ChangeMarshal cases exist in DataHub.</p>
-          <p>A canonical DataHub change case is required before work can begin.</p>
         </div>
-      </main>
+      </main>,
     );
   }
 
@@ -228,15 +261,7 @@ export function Workspace({ client = httpWorkspaceClient, sessionAction, request
           : "Another governed operation is in progress…";
 
   return (
-    <div className="workspace-shell">
-      <CaseRail
-        cases={cases}
-        current={current}
-        disabled={busy !== undefined}
-        onSelect={(caseKey) => void selectCase(caseKey)}
-        {...(sessionAction === undefined ? {} : { sessionAction })}
-      />
-
+    renderShell(
       <main className="case-main" aria-labelledby="case-title">
         <header className="case-header" id="overview">
           <div>
@@ -251,8 +276,6 @@ export function Workspace({ client = httpWorkspaceClient, sessionAction, request
           <a href="#overview">Overview</a><a href="#execution-graph">Graph</a><a href="#work">Work</a>
           <a href="#approvals">Approvals</a><a href="#evidence">Evidence</a><a href="#history">History</a>
         </nav>
-
-        {error && <div className="error-banner" role="alert"><strong>Not verified.</strong> {error}</div>}
 
         <span className="sr-only" role="status" aria-label="Case action status" aria-live="polite">{actionStatus}</span>
         <section className="command-bar" aria-label="Case actions" aria-busy={busy !== undefined}>
@@ -275,7 +298,7 @@ export function Workspace({ client = httpWorkspaceClient, sessionAction, request
 
         <ChangeFlow value={current} {...(visibleRun?.caseKey === current.caseKey ? { run: visibleRun } : {})} />
         <CaseSections value={current} />
-      </main>
-    </div>
+      </main>,
+    )
   );
 }
